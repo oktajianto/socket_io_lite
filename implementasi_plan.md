@@ -227,14 +227,17 @@ Diurutkan dari nilai tertinggi.
 - [ ] Dukungan `--wasm` (butuh package:web, trade-off zero-dep)
 - [ ] Volatile emit
 
-### Fase 10 — Polish & rilis pub.dev
+### Fase 10 — Polish & rilis pub.dev (SIAP PUBLISH)
 
-- [ ] Dartdoc pada seluruh API publik
-- [ ] README final + contoh lengkap + GIF/diagram + matriks kompatibilitas
-- [ ] `.github/workflows/ci.yml` (analyze + test) → badge CI hidup
-- [ ] `.pubignore` (kecualikan `example/server`, build)
-- [ ] `dart pub publish --dry-run` bersih (0 warning)
-- [ ] **Publish v0.1.0**
+- [x] Dartdoc pada seluruh API publik
+- [x] README final + contoh lengkap (signaling WebRTC, reconnection, namespaces,
+      multi-arg) + matriks platform/kompatibilitas
+- [x] `.github/workflows/ci.yml` (format + analyze + test + dry-run) → badge CI
+- [x] `.pubignore` (kecualikan `example/server`, build, plan) → archive 25 KB
+- [x] `dart format` seluruh kode (CI check lolos)
+- [x] `dart pub publish --dry-run` → **0 warning** (dari git tree bersih)
+- [ ] **Publish v0.1.0** — tinggal `flutter pub publish` saat repo dijadikan
+      public (dilakukan manual olehmu)
 
 ## Keputusan yang Sudah Diambil
 

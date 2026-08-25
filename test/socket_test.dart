@@ -325,6 +325,66 @@ void main() {
     });
   });
 
+  group('multi-argument emit / receive', () {
+    Future<(SocketIoLite, FakeTransport)> connected() async {
+      final fake = FakeTransport();
+      final socket =
+          SocketIoLite.connect('ws://x', transportFactory: () => fake);
+      fake.serverSend(_openFrame);
+      await pump();
+      fake.serverSend('40{"sid":"abc"}');
+      await pump();
+      return (socket, fake);
+    }
+
+    test('emit sends multiple positional arguments', () async {
+      final (socket, fake) = await connected();
+      addTearDown(socket.dispose);
+
+      // WebRTC-style signaling: emit('offer', id, sdp).
+      socket.emit('offer', 'peer-1', {'type': 'offer', 'sdp': 'x'});
+      expect(
+        fake.sent,
+        contains('42["offer","peer-1",{"type":"offer","sdp":"x"}]'),
+      );
+    });
+
+    test('single-argument emit is unchanged (backward compatible)', () async {
+      final (socket, fake) = await connected();
+      addTearDown(socket.dispose);
+
+      socket.emit('msg', {'text': 'hi'});
+      expect(fake.sent, contains('42["msg",{"text":"hi"}]'));
+
+      socket.emit('ping');
+      expect(fake.sent, contains('42["ping"]'));
+    });
+
+    test('an incoming multi-arg event arrives as a List', () async {
+      final (socket, fake) = await connected();
+      addTearDown(socket.dispose);
+
+      dynamic got;
+      socket.on('candidate', (data) => got = data);
+
+      fake.serverSend('42["candidate","peer-1",{"sdpMid":"0"}]');
+      await pump();
+
+      expect(got, ['peer-1', {'sdpMid': '0'}]);
+    });
+
+    test('emitWithAck supports multiple arguments', () async {
+      final (socket, fake) = await connected();
+      addTearDown(socket.dispose);
+
+      final future = socket.emitWithAck('join', 'room-1', {'role': 'viewer'});
+      expect(fake.sent, contains('420["join","room-1",{"role":"viewer"}]'));
+
+      fake.serverSend('430[{"ok":true}]');
+      expect(await future.timeout(const Duration(seconds: 1)), {'ok': true});
+    });
+  });
+
   group('of() multi-namespace', () {
     test('shares one connection and connects both namespaces', () async {
       final fakes = <FakeTransport>[];

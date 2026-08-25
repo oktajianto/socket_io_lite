@@ -207,6 +207,9 @@ Diurutkan dari nilai tertinggi.
 - [x] `onAny(handler)` / `offAny()` untuk menangkap semua event
 - [x] `once(event, handler)` — listener sekali pakai
 - [x] `onAck(event, handler)` — balas ack saat server mengirim event ber-ack
+- [x] **Emit multi-argumen** — `emit('offer', id, sdp)` (variadic, cocok pola
+      signaling WebRTC server lama); event masuk multi-arg diterima sebagai
+      `List`; `emitWithAck` juga multi-arg; backward-compatible (sentinel `_unset`)
 - [x] **Namespace ganda `socket.of('/admin')` (share 1 koneksi)** — refactor ke
       pola **Manager + Socket** (pakai `part`): satu `SocketManager` memegang
       EngineIo + reconnection, banyak `SocketIoLite` per-namespace berbagi 1

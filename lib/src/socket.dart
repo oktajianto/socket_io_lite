@@ -313,37 +313,52 @@ class SocketIoLite {
   /// Removes the acknowledgement responder for [event].
   void offAck(String event) => _ackHandlers.remove(event);
 
-  /// Emits [event] with an optional [data] payload. Buffered until connected.
-  void emit(String event, [Object? data]) {
-    final args = data == null ? [event] : [event, data];
+  /// Emits [event] with zero or more positional argument payloads.
+  ///
+  /// Matches Socket.IO's variadic emit, so `emit('offer', id, sdp)` sends both
+  /// arguments (`["offer", id, sdp]` on the wire). Buffered until connected.
+  void emit(
+    String event, [
+    Object? arg1 = _unset,
+    Object? arg2 = _unset,
+    Object? arg3 = _unset,
+    Object? arg4 = _unset,
+    Object? arg5 = _unset,
+  ]) {
     _sendOrBuffer(
       SocketParser.encode(
         SocketPacket(
           type: SocketPacketType.event,
           namespace: namespace,
-          data: args,
+          data: _collectArgs(event, arg1, arg2, arg3, arg4, arg5),
         ),
       ),
     );
   }
 
-  /// Emits [event] with an optional [data] payload and waits for the server's
-  /// acknowledgement, completing with the acked value.
+  /// Emits [event] with zero or more positional arguments and waits for the
+  /// server's acknowledgement, completing with the acked value.
   ///
   /// Fails with a [TimeoutException] if [ackTimeout] is set and elapses, or
   /// with a [SocketException] if the socket closes while waiting.
-  Future<dynamic> emitWithAck(String event, [Object? data]) {
+  Future<dynamic> emitWithAck(
+    String event, [
+    Object? arg1 = _unset,
+    Object? arg2 = _unset,
+    Object? arg3 = _unset,
+    Object? arg4 = _unset,
+    Object? arg5 = _unset,
+  ]) {
     final id = _ackCounter++;
     final completer = Completer<dynamic>();
     _pendingAcks[id] = completer;
 
-    final args = data == null ? [event] : [event, data];
     _sendOrBuffer(
       SocketParser.encode(
         SocketPacket(
           type: SocketPacketType.event,
           namespace: namespace,
-          data: args,
+          data: _collectArgs(event, arg1, arg2, arg3, arg4, arg5),
           ackId: id,
         ),
       ),
@@ -436,6 +451,25 @@ class SocketIoLite {
     _outbuffer.clear();
   }
 
+  /// Builds the wire args list `[event, ...provided]`, stopping at the first
+  /// argument left at its [_unset] default. This lets an explicit `null` be
+  /// distinguished from an omitted argument.
+  static List<Object?> _collectArgs(
+    String event,
+    Object? a1,
+    Object? a2,
+    Object? a3,
+    Object? a4,
+    Object? a5,
+  ) {
+    final args = <Object?>[event];
+    for (final a in [a1, a2, a3, a4, a5]) {
+      if (identical(a, _unset)) break;
+      args.add(a);
+    }
+    return args;
+  }
+
   /// Normalizes an argument list into a single value, a list, or `null`.
   static dynamic _payloadOf(Object? data) {
     if (data is! List) return data;
@@ -464,6 +498,14 @@ class SocketIoLite {
     return SocketException._('connect_error: $data');
   }
 }
+
+/// Sentinel marking an omitted positional emit argument, so an explicit `null`
+/// argument is not confused with "not provided".
+class _UnsetArg {
+  const _UnsetArg();
+}
+
+const Object _unset = _UnsetArg();
 
 /// A Socket.IO protocol-level error (e.g. a CONNECT_ERROR from the server).
 class SocketException implements Exception {

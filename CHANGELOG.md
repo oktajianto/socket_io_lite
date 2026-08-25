@@ -19,6 +19,10 @@ Work in progress — see `implementasi_plan.md`.
 - Multiplexed namespaces: `socket.of('/ns')` shares a single WebSocket across
   namespaces (Manager + Socket architecture), each with its own CONNECT,
   listeners, and acks.
+- Variadic emit: `emit(event, arg1, arg2, ...)` and the same for `emitWithAck`,
+  matching Socket.IO's multi-argument events (e.g. WebRTC signaling). Incoming
+  multi-argument events are delivered to handlers as a `List`. An explicitly
+  passed `null` is now sent as an argument (previously omitted).
 - Web support via `dart:html` WebSocket, selected automatically through a
   conditional import — one API across native, web, and desktop. The web build
   compiles and shares the same protocol layer that is tested on the VM.

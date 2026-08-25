@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'engine.dart';
 import 'packet.dart';
@@ -17,6 +18,10 @@ typedef LifecycleHandler = void Function(dynamic data);
 /// Handler for errors ([SocketIoLite.onError]).
 typedef ErrorHandler = void Function(Object error);
 
+/// Handler for reconnection progress ([SocketIoLite.onReconnect] /
+/// [SocketIoLite.onReconnectAttempt]). [attempt] is the 1-based attempt count.
+typedef ReconnectHandler = void Function(int attempt);
+
 /// A lightweight, zero-dependency Socket.IO client (Engine.IO v4 / Socket.IO
 /// v4).
 ///
@@ -28,30 +33,56 @@ typedef ErrorHandler = void Function(Object error);
 /// ```
 ///
 /// [emit] calls made before the connection is established are buffered and
-/// flushed once the server acknowledges the connection.
+/// flushed once the server acknowledges the connection. When the connection
+/// drops, the socket reconnects automatically with exponential backoff (unless
+/// disabled), re-running the namespace CONNECT and keeping all listeners.
 class SocketIoLite {
-  SocketIoLite._(this._engine, this.namespace);
+  SocketIoLite._(this._uri, this.namespace);
 
-  final EngineIo _engine;
+  final Uri _uri;
 
   /// The namespace this socket is attached to. Defaults to the root `/`.
   final String namespace;
 
-  final Map<String, List<EventHandler>> _listeners = {};
-  final List<LifecycleHandler> _onConnect = [];
-  final List<LifecycleHandler> _onDisconnect = [];
-  final List<ErrorHandler> _onError = [];
-  final List<String> _outbuffer = [];
-  final Map<int, Completer<dynamic>> _pendingAcks = {};
-  int _ackCounter = 0;
+  // Connection configuration.
+  Map<String, dynamic>? _auth;
+  Map<String, dynamic>? _headers;
+  SocketTransport Function()? _transportFactory;
+
+  /// Whether to reconnect automatically after a drop. Default `true`.
+  bool reconnection = true;
+
+  /// Maximum reconnection attempts before giving up. `null` means unlimited.
+  int? reconnectionAttempts;
+
+  /// Base backoff delay; doubles each attempt up to [reconnectionDelayMax].
+  Duration reconnectionDelay = const Duration(seconds: 1);
+
+  /// Upper bound for the backoff delay.
+  Duration reconnectionDelayMax = const Duration(seconds: 5);
 
   /// How long [emitWithAck] waits for the server's acknowledgement before
   /// failing with a [TimeoutException]. `null` means wait indefinitely.
   Duration? ackTimeout;
 
+  final Map<String, List<EventHandler>> _listeners = {};
+  final List<LifecycleHandler> _onConnect = [];
+  final List<LifecycleHandler> _onDisconnect = [];
+  final List<ErrorHandler> _onError = [];
+  final List<ReconnectHandler> _onReconnect = [];
+  final List<ReconnectHandler> _onReconnectAttempt = [];
+  final List<void Function()> _onReconnectFailed = [];
+  final List<String> _outbuffer = [];
+  final Map<int, Completer<dynamic>> _pendingAcks = {};
+  int _ackCounter = 0;
+
+  EngineIo? _engine;
+  StreamSubscription<String>? _engineSub;
+  Timer? _reconnectTimer;
+  int _reconnectAttempt = 0;
+  bool _hasConnected = false;
+  bool _closedByUser = false;
   bool _connected = false;
-  bool _disposed = false;
-  bool _disconnectAnnounced = false;
 
   /// The server-assigned session id for this namespace, once connected.
   String? id;
@@ -73,41 +104,55 @@ class SocketIoLite {
     Map<String, String> query = const {},
     Map<String, dynamic>? headers,
     Duration? ackTimeout,
+    bool reconnection = true,
+    int? reconnectionAttempts,
+    Duration reconnectionDelay = const Duration(seconds: 1),
+    Duration reconnectionDelayMax = const Duration(seconds: 5),
     SocketTransport Function()? transportFactory,
   }) {
     final uri = EngineIo.buildUri(url, query: query);
-    final engine = EngineIo(
-      uri,
-      headers: headers,
-      transportFactory: transportFactory,
-    );
-    final socket = SocketIoLite._(engine, namespace)..ackTimeout = ackTimeout;
-    socket._start(auth);
+    final socket = SocketIoLite._(uri, namespace)
+      .._auth = auth
+      .._headers = headers
+      .._transportFactory = transportFactory
+      ..ackTimeout = ackTimeout
+      ..reconnection = reconnection
+      ..reconnectionAttempts = reconnectionAttempts
+      ..reconnectionDelay = reconnectionDelay
+      ..reconnectionDelayMax = reconnectionDelayMax;
+    socket._openConnection();
     return socket;
   }
 
-  Future<void> _start(Map<String, dynamic>? auth) async {
-    _engine.messages.listen(
+  Future<void> _openConnection() async {
+    final engine = EngineIo(
+      _uri,
+      headers: _headers,
+      transportFactory: _transportFactory,
+    );
+    _engine = engine;
+    _engineSub = engine.messages.listen(
       _onEngineMessage,
       onError: (Object e, StackTrace _) => _fireError(e),
       cancelOnError: false,
     );
-    unawaited(_engine.done.then((_) => _handleClosed()));
+    unawaited(engine.done.then((_) => _handleEngineDown(engine)));
 
     try {
-      await _engine.open();
+      await engine.open();
     } catch (e) {
       _fireError(e);
+      _handleEngineDown(engine);
       return;
     }
 
     // Request the namespace connection.
-    _engine.send(
+    engine.send(
       SocketParser.encode(
         SocketPacket(
           type: SocketPacketType.connect,
           namespace: namespace,
-          data: auth,
+          data: _auth,
         ),
       ),
     );
@@ -131,7 +176,7 @@ class SocketIoLite {
       case SocketPacketType.connectError:
         _fireError(_describeError(packet.data));
       case SocketPacketType.disconnect:
-        _handleClosed();
+        _handleEngineDown(_engine);
       case SocketPacketType.event:
         _handleEvent(packet);
       case SocketPacketType.ack:
@@ -147,11 +192,23 @@ class SocketIoLite {
     if (data is Map && data['sid'] != null) {
       id = data['sid'].toString();
     }
+    _reconnectTimer?.cancel();
     _connected = true;
+
+    final wasReconnecting = _hasConnected;
+    final attempt = _reconnectAttempt;
+    _reconnectAttempt = 0;
+
     _flush();
     for (final handler in List<LifecycleHandler>.from(_onConnect)) {
       handler(data);
     }
+    if (wasReconnecting) {
+      for (final handler in List<ReconnectHandler>.from(_onReconnect)) {
+        handler(attempt);
+      }
+    }
+    _hasConnected = true;
   }
 
   void _handleAck(SocketPacket packet) {
@@ -241,7 +298,8 @@ class SocketIoLite {
     return completer.future;
   }
 
-  /// Registers a callback fired when the connection is established.
+  /// Registers a callback fired when the connection is established (on the
+  /// first connect and after each reconnect).
   void onConnect(LifecycleHandler handler) => _onConnect.add(handler);
 
   /// Registers a callback fired when the connection is lost.
@@ -250,11 +308,24 @@ class SocketIoLite {
   /// Registers a callback fired on transport or protocol errors.
   void onError(ErrorHandler handler) => _onError.add(handler);
 
-  /// Sends a DISCONNECT packet, then tears down the connection.
+  /// Registers a callback fired when a reconnection succeeds.
+  void onReconnect(ReconnectHandler handler) => _onReconnect.add(handler);
+
+  /// Registers a callback fired before each reconnection attempt.
+  void onReconnectAttempt(ReconnectHandler handler) =>
+      _onReconnectAttempt.add(handler);
+
+  /// Registers a callback fired when reconnection gives up after exhausting
+  /// [reconnectionAttempts].
+  void onReconnectFailed(void Function() handler) =>
+      _onReconnectFailed.add(handler);
+
+  /// Sends a DISCONNECT packet, then tears down the connection (no reconnect).
   Future<void> disconnect() async {
-    if (_connected) {
+    final engine = _engine;
+    if (_connected && engine != null) {
       try {
-        _engine.send(
+        engine.send(
           SocketParser.encode(
             SocketPacket(
               type: SocketPacketType.disconnect,
@@ -269,16 +340,29 @@ class SocketIoLite {
     await dispose();
   }
 
-  /// Closes the connection and releases all resources. Idempotent.
+  /// Closes the connection, cancels any pending reconnect, and releases all
+  /// resources. Idempotent.
   Future<void> dispose() async {
-    if (_disposed) return;
-    _disposed = true;
-    await _engine.close();
+    if (_closedByUser) return;
+    _closedByUser = true;
+    _reconnectTimer?.cancel();
+
+    final engine = _engine;
+    _engine = null;
+    await _engineSub?.cancel();
+    _engineSub = null;
+    await engine?.close();
+
+    _failPendingAcks(SocketException._('Socket disposed'));
+    if (_connected) {
+      _connected = false;
+      _announceDisconnect();
+    }
   }
 
   void _sendOrBuffer(String packet) {
     if (_connected) {
-      _engine.send(packet);
+      _engine?.send(packet);
     } else {
       _outbuffer.add(packet);
     }
@@ -287,7 +371,7 @@ class SocketIoLite {
   void _flush() {
     if (_outbuffer.isEmpty) return;
     for (final packet in _outbuffer) {
-      _engine.send(packet);
+      _engine?.send(packet);
     }
     _outbuffer.clear();
   }
@@ -299,18 +383,53 @@ class SocketIoLite {
     return data.length == 1 ? data.first : data;
   }
 
-  void _handleClosed() {
+  /// Handles the current [engine] going down: cleans up, announces a
+  /// disconnect, and schedules a reconnect. Ignores stale engines.
+  void _handleEngineDown(EngineIo? engine) {
+    if (engine == null || !identical(engine, _engine)) return;
+    _engine = null;
+    _engineSub?.cancel();
+    _engineSub = null;
+
     _failPendingAcks(SocketException._('Connection closed while awaiting ack'));
+
     final wasConnected = _connected;
     _connected = false;
-    if (_disconnectAnnounced) return;
-    _disconnectAnnounced = true;
-    // Announce a disconnect only if we ever connected, or the user explicitly
-    // disposed. A failure before connecting is reported via onError instead.
-    if (wasConnected || _disposed) {
-      for (final handler in List<LifecycleHandler>.from(_onDisconnect)) {
-        handler(null);
+    if (wasConnected) _announceDisconnect();
+
+    if (_closedByUser) return;
+    _scheduleReconnect();
+  }
+
+  void _scheduleReconnect() {
+    if (!reconnection || _closedByUser) return;
+
+    final max = reconnectionAttempts;
+    if (max != null && _reconnectAttempt >= max) {
+      for (final handler in List<void Function()>.from(_onReconnectFailed)) {
+        handler();
       }
+      return;
+    }
+
+    _reconnectAttempt++;
+    final backoff =
+        reconnectionDelay.inMilliseconds * math.pow(2, _reconnectAttempt - 1);
+    final delayMs =
+        math.min(backoff, reconnectionDelayMax.inMilliseconds.toDouble())
+            .toInt();
+
+    for (final handler in List<ReconnectHandler>.from(_onReconnectAttempt)) {
+      handler(_reconnectAttempt);
+    }
+
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(Duration(milliseconds: delayMs), _openConnection);
+  }
+
+  void _announceDisconnect() {
+    for (final handler in List<LifecycleHandler>.from(_onDisconnect)) {
+      handler(null);
     }
   }
 

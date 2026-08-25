@@ -10,6 +10,11 @@ import 'package:socket_io_lite/src/transport/transport.dart';
 /// An in-memory transport: the test pushes inbound frames with [serverSend] and
 /// inspects outbound frames via [sent].
 class FakeTransport implements SocketTransport {
+  FakeTransport({this.failOnConnect = false});
+
+  /// When true, [connect] throws — used to simulate an unreachable server.
+  final bool failOnConnect;
+
   final StreamController<String> _messages = StreamController<String>.broadcast();
   final Completer<void> _done = Completer<void>();
   final List<String> sent = [];
@@ -26,6 +31,7 @@ class FakeTransport implements SocketTransport {
 
   @override
   Future<void> connect(Uri uri, {Map<String, dynamic>? headers}) async {
+    if (failOnConnect) throw StateError('connection refused');
     _connected = true;
   }
 
@@ -173,8 +179,12 @@ void main() {
 
   test('pending acks fail when the connection closes', () async {
     final fake = FakeTransport();
-    final socket =
-        SocketIoLite.connect('ws://x', transportFactory: () => fake);
+    final socket = SocketIoLite.connect(
+      'ws://x',
+      reconnection: false,
+      transportFactory: () => fake,
+    );
+    addTearDown(socket.dispose);
 
     fake.serverSend(_openFrame);
     await pump();
@@ -189,8 +199,12 @@ void main() {
 
   test('onDisconnect fires when the connection closes', () async {
     final fake = FakeTransport();
-    final socket =
-        SocketIoLite.connect('ws://x', transportFactory: () => fake);
+    final socket = SocketIoLite.connect(
+      'ws://x',
+      reconnection: false,
+      transportFactory: () => fake,
+    );
+    addTearDown(socket.dispose);
 
     fake.serverSend(_openFrame);
     await pump();
@@ -252,5 +266,105 @@ void main() {
     fake.serverSend('42/admin,["ping"]');
     await pump();
     expect(called, isTrue);
+  });
+
+  group('reconnection', () {
+    test('reconnects with a fresh engine and fires onReconnect', () async {
+      final fakes = <FakeTransport>[];
+      FakeTransport factory() {
+        final f = FakeTransport();
+        fakes.add(f);
+        return f;
+      }
+
+      final socket = SocketIoLite.connect(
+        'ws://x',
+        reconnectionDelay: const Duration(milliseconds: 20),
+        transportFactory: factory,
+      );
+      addTearDown(socket.dispose);
+
+      // First connection.
+      fakes[0].serverSend(_openFrame);
+      await pump();
+      fakes[0].serverSend('40{"sid":"a"}');
+      await pump();
+      expect(socket.connected, isTrue);
+      expect(socket.id, 'a');
+
+      final reconnected = Completer<int>();
+      socket.onReconnect(reconnected.complete);
+
+      // Drop the connection.
+      await fakes[0].close();
+      await pump();
+      expect(socket.connected, isFalse);
+
+      // The backoff timer should spin up a second transport.
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(fakes.length, greaterThanOrEqualTo(2));
+
+      // Drive the new engine's handshake + connect.
+      fakes[1].serverSend(_openFrame);
+      await pump();
+      fakes[1].serverSend('40{"sid":"b"}');
+      await pump();
+
+      final attempt = await reconnected.future.timeout(
+        const Duration(seconds: 2),
+      );
+      expect(attempt, 1);
+      expect(socket.connected, isTrue);
+      expect(socket.id, 'b');
+    });
+
+    test('gives up after reconnectionAttempts and fires onReconnectFailed',
+        () async {
+      var attempts = 0;
+      final failed = Completer<void>();
+
+      final socket = SocketIoLite.connect(
+        'ws://x',
+        reconnectionAttempts: 2,
+        reconnectionDelay: const Duration(milliseconds: 10),
+        transportFactory: () => FakeTransport(failOnConnect: true),
+      );
+      addTearDown(socket.dispose);
+
+      socket.onError((_) {}); // swallow the connection errors
+      socket.onReconnectAttempt((_) => attempts++);
+      socket.onReconnectFailed(failed.complete);
+
+      await failed.future.timeout(const Duration(seconds: 2));
+      expect(attempts, 2);
+      expect(socket.connected, isFalse);
+    });
+
+    test('no reconnect when reconnection is disabled', () async {
+      final fakes = <FakeTransport>[];
+      FakeTransport factory() {
+        final f = FakeTransport();
+        fakes.add(f);
+        return f;
+      }
+
+      final socket = SocketIoLite.connect(
+        'ws://x',
+        reconnection: false,
+        transportFactory: factory,
+      );
+      addTearDown(socket.dispose);
+
+      fakes[0].serverSend(_openFrame);
+      await pump();
+      fakes[0].serverSend('40{"sid":"a"}');
+      await pump();
+
+      await fakes[0].close();
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+
+      expect(fakes.length, 1); // no new transport was created
+      expect(socket.connected, isFalse);
+    });
   });
 }

@@ -10,7 +10,10 @@ Work in progress — see `implementasi_plan.md`.
   `onError`, `disconnect`, and `dispose`.
 - Namespaces, connection auth payload, query params, and pre-connect emit
   buffering.
+- Acknowledgements: `emitWithAck` with optional `ackTimeout`.
+- Automatic reconnection with exponential backoff (`reconnection`,
+  `reconnectionAttempts`, `reconnectionDelay`, `reconnectionDelayMax`) and
+  `onReconnect` / `onReconnectAttempt` / `onReconnectFailed`.
 - Verified end-to-end against a real `socket.io` v4 server.
 
-Planned next: acknowledgements (`emitWithAck`), automatic reconnection, and
-web support.
+Planned next: web support (`dart:html`).

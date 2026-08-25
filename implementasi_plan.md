@@ -161,12 +161,17 @@ Terverifikasi end-to-end ke server `socket.io` v4 asli.
 - [x] Pending ack gagal dengan `SocketException` saat koneksi tutup
 - [x] Test round-trip ack (transport palsu) + verifikasi ke server asli
 
-### Fase 6 — Reconnection & connection state
+### Fase 6 — Reconnection & connection state (SELESAI)
 
-- [ ] Exponential backoff (`reconnect`, `reconnectDelay`, `maxReconnectAttempts`)
-- [ ] Event: `onReconnectAttempt`, `onReconnect`, `onReconnectFailed`
-- [ ] Re-join namespace + re-attach listener setelah reconnect
-- [ ] Test dengan transport palsu yang men-drop koneksi
+- [x] Exponential backoff (`reconnection`, `reconnectionAttempts`,
+      `reconnectionDelay`, `reconnectionDelayMax`) — delay = base·2^(n-1), di-cap
+- [x] Event: `onReconnectAttempt`, `onReconnect`, `onReconnectFailed`
+- [x] Engine dibuat ulang tiap attempt; namespace CONNECT dikirim ulang;
+      listener & config persist di socket (bukan di engine)
+- [x] Pending ack digagalkan saat drop; emit di-buffer lagi lalu flush saat pulih
+- [x] `dispose()` membatalkan timer reconnect; `disconnect()` = tak reconnect
+- [x] Test transport palsu: reconnect+onReconnect, give-up+onReconnectFailed,
+      reconnection:false; e2e ke server asli tetap hijau
 
 ### Fase 7 — Dukungan Web (dart:html)
 

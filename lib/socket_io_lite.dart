@@ -3,5 +3,12 @@
 /// Targets Engine.IO v4 / Socket.IO v4. See [SocketIoLite] to get started.
 library;
 
-export 'src/socket.dart' show SocketIoLite, SocketException, EventHandler, LifecycleHandler, ErrorHandler;
+export 'src/socket.dart'
+    show
+        SocketIoLite,
+        SocketException,
+        EventHandler,
+        LifecycleHandler,
+        ErrorHandler,
+        ReconnectHandler;
 export 'src/packet.dart' show Handshake;

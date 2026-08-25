@@ -47,7 +47,8 @@ enum SocketPacketType {
 
   /// Whether this type carries binary attachments (not yet supported).
   bool get isBinary =>
-      this == SocketPacketType.binaryEvent || this == SocketPacketType.binaryAck;
+      this == SocketPacketType.binaryEvent ||
+      this == SocketPacketType.binaryAck;
 
   /// Resolves a type from its numeric [id], or throws [FormatException].
   static SocketPacketType fromId(int id) {

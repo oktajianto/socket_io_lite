@@ -15,7 +15,8 @@ class FakeTransport implements SocketTransport {
   /// When true, [connect] throws — used to simulate an unreachable server.
   final bool failOnConnect;
 
-  final StreamController<String> _messages = StreamController<String>.broadcast();
+  final StreamController<String> _messages =
+      StreamController<String>.broadcast();
   final Completer<void> _done = Completer<void>();
   final List<String> sent = [];
   bool _connected = false;
@@ -61,8 +62,7 @@ Future<void> pump() => Future<void>.delayed(const Duration(milliseconds: 5));
 void main() {
   test('connect flow: handshake, CONNECT sent, onConnect fires', () async {
     final fake = FakeTransport();
-    final socket =
-        SocketIoLite.connect('ws://x', transportFactory: () => fake);
+    final socket = SocketIoLite.connect('ws://x', transportFactory: () => fake);
     addTearDown(socket.dispose);
 
     final connected = Completer<void>();
@@ -83,8 +83,7 @@ void main() {
 
   test('dispatches an incoming event to on() handlers', () async {
     final fake = FakeTransport();
-    final socket =
-        SocketIoLite.connect('ws://x', transportFactory: () => fake);
+    final socket = SocketIoLite.connect('ws://x', transportFactory: () => fake);
     addTearDown(socket.dispose);
 
     final received = Completer<dynamic>();
@@ -102,8 +101,7 @@ void main() {
 
   test('emit sends an event frame once connected', () async {
     final fake = FakeTransport();
-    final socket =
-        SocketIoLite.connect('ws://x', transportFactory: () => fake);
+    final socket = SocketIoLite.connect('ws://x', transportFactory: () => fake);
     addTearDown(socket.dispose);
 
     fake.serverSend(_openFrame);
@@ -117,8 +115,7 @@ void main() {
 
   test('emit before connect is buffered, then flushed on connect', () async {
     final fake = FakeTransport();
-    final socket =
-        SocketIoLite.connect('ws://x', transportFactory: () => fake);
+    final socket = SocketIoLite.connect('ws://x', transportFactory: () => fake);
     addTearDown(socket.dispose);
 
     // Emit while still connecting.
@@ -137,8 +134,7 @@ void main() {
 
   test('emitWithAck resolves with the server ack payload', () async {
     final fake = FakeTransport();
-    final socket =
-        SocketIoLite.connect('ws://x', transportFactory: () => fake);
+    final socket = SocketIoLite.connect('ws://x', transportFactory: () => fake);
     addTearDown(socket.dispose);
 
     fake.serverSend(_openFrame);
@@ -221,8 +217,7 @@ void main() {
 
   test('connectError surfaces via onError', () async {
     final fake = FakeTransport();
-    final socket =
-        SocketIoLite.connect('ws://x', transportFactory: () => fake);
+    final socket = SocketIoLite.connect('ws://x', transportFactory: () => fake);
     addTearDown(socket.dispose);
 
     final errored = Completer<Object>();
@@ -270,8 +265,10 @@ void main() {
 
   group('event helpers', () {
     Future<SocketIoLite> connected(FakeTransport fake) async {
-      final socket =
-          SocketIoLite.connect('ws://x', transportFactory: () => fake);
+      final socket = SocketIoLite.connect(
+        'ws://x',
+        transportFactory: () => fake,
+      );
       fake.serverSend(_openFrame);
       await pump();
       fake.serverSend('40{"sid":"abc"}');
@@ -328,8 +325,10 @@ void main() {
   group('multi-argument emit / receive', () {
     Future<(SocketIoLite, FakeTransport)> connected() async {
       final fake = FakeTransport();
-      final socket =
-          SocketIoLite.connect('ws://x', transportFactory: () => fake);
+      final socket = SocketIoLite.connect(
+        'ws://x',
+        transportFactory: () => fake,
+      );
       fake.serverSend(_openFrame);
       await pump();
       fake.serverSend('40{"sid":"abc"}');
@@ -370,7 +369,10 @@ void main() {
       fake.serverSend('42["candidate","peer-1",{"sdpMid":"0"}]');
       await pump();
 
-      expect(got, ['peer-1', {'sdpMid': '0'}]);
+      expect(got, [
+        'peer-1',
+        {'sdpMid': '0'},
+      ]);
     });
 
     test('emitWithAck supports multiple arguments', () async {
@@ -509,27 +511,29 @@ void main() {
       expect(socket.id, 'b');
     });
 
-    test('gives up after reconnectionAttempts and fires onReconnectFailed',
-        () async {
-      var attempts = 0;
-      final failed = Completer<void>();
+    test(
+      'gives up after reconnectionAttempts and fires onReconnectFailed',
+      () async {
+        var attempts = 0;
+        final failed = Completer<void>();
 
-      final socket = SocketIoLite.connect(
-        'ws://x',
-        reconnectionAttempts: 2,
-        reconnectionDelay: const Duration(milliseconds: 10),
-        transportFactory: () => FakeTransport(failOnConnect: true),
-      );
-      addTearDown(socket.dispose);
+        final socket = SocketIoLite.connect(
+          'ws://x',
+          reconnectionAttempts: 2,
+          reconnectionDelay: const Duration(milliseconds: 10),
+          transportFactory: () => FakeTransport(failOnConnect: true),
+        );
+        addTearDown(socket.dispose);
 
-      socket.onError((_) {}); // swallow the connection errors
-      socket.onReconnectAttempt((_) => attempts++);
-      socket.onReconnectFailed(failed.complete);
+        socket.onError((_) {}); // swallow the connection errors
+        socket.onReconnectAttempt((_) => attempts++);
+        socket.onReconnectFailed(failed.complete);
 
-      await failed.future.timeout(const Duration(seconds: 2));
-      expect(attempts, 2);
-      expect(socket.connected, isFalse);
-    });
+        await failed.future.timeout(const Duration(seconds: 2));
+        expect(attempts, 2);
+        expect(socket.connected, isFalse);
+      },
+    );
 
     test('no reconnect when reconnection is disabled', () async {
       final fakes = <FakeTransport>[];

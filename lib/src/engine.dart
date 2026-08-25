@@ -12,8 +12,11 @@ import 'transport/transport_factory.dart';
 /// Targets Engine.IO v4, where the **server** sends `ping` and the client
 /// replies with `pong`.
 class EngineIo {
-  EngineIo(this.uri, {this.headers, SocketTransport Function()? transportFactory})
-    : _transportFactory = transportFactory ?? createTransport;
+  EngineIo(
+    this.uri, {
+    this.headers,
+    SocketTransport Function()? transportFactory,
+  }) : _transportFactory = transportFactory ?? createTransport;
 
   /// The fully-built Engine.IO endpoint
   /// (`.../socket.io/?EIO=4&transport=websocket`).
@@ -25,7 +28,8 @@ class EngineIo {
   final SocketTransport Function() _transportFactory;
 
   SocketTransport? _transport;
-  final StreamController<String> _messages = StreamController<String>.broadcast();
+  final StreamController<String> _messages =
+      StreamController<String>.broadcast();
   final Completer<Handshake> _opened = Completer<Handshake>();
   final Completer<void> _done = Completer<void>();
   Timer? _pingTimeoutTimer;
@@ -168,11 +172,7 @@ class EngineIo {
     return parsed.replace(
       scheme: scheme,
       path: path,
-      queryParameters: {
-        'EIO': '4',
-        'transport': 'websocket',
-        ...query,
-      },
+      queryParameters: {'EIO': '4', 'transport': 'websocket', ...query},
     );
   }
 }

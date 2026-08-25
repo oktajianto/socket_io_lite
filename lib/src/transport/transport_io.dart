@@ -8,7 +8,8 @@ import 'transport.dart';
 /// Used on Android, iOS, Windows, macOS, and Linux.
 class IoTransport implements SocketTransport {
   WebSocket? _ws;
-  final StreamController<String> _messages = StreamController<String>.broadcast();
+  final StreamController<String> _messages =
+      StreamController<String>.broadcast();
   final Completer<void> _done = Completer<void>();
   bool _isConnected = false;
 

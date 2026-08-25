@@ -120,7 +120,11 @@ class SocketIoLite {
       reconnectionDelay: reconnectionDelay,
       reconnectionDelayMax: reconnectionDelayMax,
     );
-    final socket = manager.socket(namespace, auth: auth, ackTimeout: ackTimeout);
+    final socket = manager.socket(
+      namespace,
+      auth: auth,
+      ackTimeout: ackTimeout,
+    );
     manager.open();
     return socket;
   }

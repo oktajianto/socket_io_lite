@@ -50,26 +50,33 @@ void main() {
     await engine.close();
   });
 
-  test('send() wraps the payload in a message frame; messages unwraps it',
-      () async {
-    final server = await startServer((ws) {
-      ws.add(openFrame());
-      ws.listen((data) {
-        // Echo message frames back verbatim.
-        if (data is String && data.startsWith('4')) ws.add(data);
+  test(
+    'send() wraps the payload in a message frame; messages unwraps it',
+    () async {
+      final server = await startServer((ws) {
+        ws.add(openFrame());
+        ws.listen((data) {
+          // Echo message frames back verbatim.
+          if (data is String && data.startsWith('4')) ws.add(data);
+        });
       });
-    });
-    addTearDown(() => server.close(force: true));
+      addTearDown(() => server.close(force: true));
 
-    final engine = EngineIo(EngineIo.buildUri('ws://localhost:${server.port}'));
-    await engine.open();
+      final engine = EngineIo(
+        EngineIo.buildUri('ws://localhost:${server.port}'),
+      );
+      await engine.open();
 
-    final echoed = engine.messages.first;
-    engine.send('2["hi"]'); // becomes '42["hi"]' on the wire
-    expect(await echoed, '2["hi"]'); // unwrapped back to the Socket.IO payload
+      final echoed = engine.messages.first;
+      engine.send('2["hi"]'); // becomes '42["hi"]' on the wire
+      expect(
+        await echoed,
+        '2["hi"]',
+      ); // unwrapped back to the Socket.IO payload
 
-    await engine.close();
-  });
+      await engine.close();
+    },
+  );
 
   test('replies to a server ping with a pong', () async {
     final pongReceived = Completer<void>();

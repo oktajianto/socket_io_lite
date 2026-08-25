@@ -12,31 +12,33 @@ import 'package:socket_io_lite/socket_io_lite.dart';
 ///   flutter test test/e2e_real_server_test.dart --tags e2e --run-skipped
 ///   flutter test test/e2e_real_server_test.dart --platform chrome --tags e2e --run-skipped
 void main() {
-  test('connects to a real socket.io server, emits and receives echo',
-      () async {
-    final socket = SocketIoLite.connect('ws://localhost:3000');
-    addTearDown(socket.dispose);
+  test(
+    'connects to a real socket.io server, emits and receives echo',
+    () async {
+      final socket = SocketIoLite.connect('ws://localhost:3000');
+      addTearDown(socket.dispose);
 
-    final connected = Completer<void>();
-    final echoed = Completer<dynamic>();
+      final connected = Completer<void>();
+      final echoed = Completer<dynamic>();
 
-    socket.onConnect((_) => connected.complete());
-    socket.onError((e) => fail('unexpected error: $e'));
-    socket.on('chat:message', (data) {
-      if (!echoed.isCompleted) echoed.complete(data);
-    });
+      socket.onConnect((_) => connected.complete());
+      socket.onError((e) => fail('unexpected error: $e'));
+      socket.on('chat:message', (data) {
+        if (!echoed.isCompleted) echoed.complete(data);
+      });
 
-    await connected.future.timeout(const Duration(seconds: 5));
-    expect(socket.connected, isTrue);
+      await connected.future.timeout(const Duration(seconds: 5));
+      expect(socket.connected, isTrue);
 
-    socket.emit('chat:message', {'text': 'halo'});
+      socket.emit('chat:message', {'text': 'halo'});
 
-    final reply = await echoed.future.timeout(const Duration(seconds: 5));
-    expect(reply, {
-      'echo': {'text': 'halo'},
-      'from': 'server',
-    });
-  });
+      final reply = await echoed.future.timeout(const Duration(seconds: 5));
+      expect(reply, {
+        'echo': {'text': 'halo'},
+        'from': 'server',
+      });
+    },
+  );
 
   test('emitWithAck resolves with the real server acknowledgement', () async {
     final socket = SocketIoLite.connect('ws://localhost:3000');

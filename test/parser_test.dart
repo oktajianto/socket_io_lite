@@ -7,12 +7,21 @@ void main() {
     test('encodes frames with and without data', () {
       expect(EngineParser.encode(EnginePacketType.ping), '2');
       expect(EngineParser.encode(EnginePacketType.pong), '3');
-      expect(EngineParser.encode(EnginePacketType.message, '2["hi"]'), '42["hi"]');
+      expect(
+        EngineParser.encode(EnginePacketType.message, '2["hi"]'),
+        '42["hi"]',
+      );
     });
 
     test('decodes frames into type + data', () {
-      expect(EngineParser.decode('2'), const EnginePacket(EnginePacketType.ping));
-      expect(EngineParser.decode('3'), const EnginePacket(EnginePacketType.pong));
+      expect(
+        EngineParser.decode('2'),
+        const EnginePacket(EnginePacketType.ping),
+      );
+      expect(
+        EngineParser.decode('3'),
+        const EnginePacket(EnginePacketType.pong),
+      );
       expect(
         EngineParser.decode('42["hi"]'),
         const EnginePacket(EnginePacketType.message, '2["hi"]'),
@@ -74,7 +83,10 @@ void main() {
         SocketParser.encode(
           const SocketPacket(
             type: SocketPacketType.event,
-            data: ['chat:message', {'text': 'halo'}],
+            data: [
+              'chat:message',
+              {'text': 'halo'},
+            ],
           ),
         ),
         '2["chat:message",{"text":"halo"}]',
@@ -182,11 +194,14 @@ void main() {
       expect(p.data, ['hi']);
     });
 
-    test('a comma inside the payload is not read as the namespace separator', () {
-      final p = SocketParser.decode('2/room,["msg","a,b,c"]');
-      expect(p.namespace, '/room');
-      expect(p.data, ['msg', 'a,b,c']);
-    });
+    test(
+      'a comma inside the payload is not read as the namespace separator',
+      () {
+        final p = SocketParser.decode('2/room,["msg","a,b,c"]');
+        expect(p.namespace, '/room');
+        expect(p.data, ['msg', 'a,b,c']);
+      },
+    );
 
     test('ack packet', () {
       final p = SocketParser.decode('31["ok"]');
@@ -213,12 +228,15 @@ void main() {
   group('round-trip encode ∘ decode', () {
     final packets = <SocketPacket>[
       const SocketPacket(type: SocketPacketType.connect),
-      const SocketPacket(type: SocketPacketType.connect, data: {'token': 'abc'}),
-      const SocketPacket(type: SocketPacketType.disconnect, namespace: '/admin'),
       const SocketPacket(
-        type: SocketPacketType.event,
-        data: ['hi', 1, true],
+        type: SocketPacketType.connect,
+        data: {'token': 'abc'},
       ),
+      const SocketPacket(
+        type: SocketPacketType.disconnect,
+        namespace: '/admin',
+      ),
+      const SocketPacket(type: SocketPacketType.event, data: ['hi', 1, true]),
       const SocketPacket(
         type: SocketPacketType.event,
         namespace: '/admin',

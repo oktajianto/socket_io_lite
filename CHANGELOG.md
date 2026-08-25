@@ -1,6 +1,6 @@
-## 0.1.0 (unreleased)
+## 0.1.0
 
-Work in progress — see `implementasi_plan.md`.
+Initial release.
 
 - Zero-dependency Socket.IO client for Dart & Flutter (Engine.IO v4 /
   Socket.IO v4).

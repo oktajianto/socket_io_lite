@@ -15,7 +15,8 @@ import 'transport.dart';
 /// so [connect]'s `headers` argument is ignored here.
 class HtmlTransport implements SocketTransport {
   html.WebSocket? _ws;
-  final StreamController<String> _messages = StreamController<String>.broadcast();
+  final StreamController<String> _messages =
+      StreamController<String>.broadcast();
   final Completer<void> _done = Completer<void>();
   bool _connected = false;
 

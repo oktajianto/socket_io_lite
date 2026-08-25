@@ -46,9 +46,10 @@ class SocketManager {
     final existing = _sockets[namespace];
     if (existing != null) return existing;
 
-    final s = SocketIoLite._(this, namespace)
-      ..auth = auth
-      ..ackTimeout = ackTimeout;
+    final s =
+        SocketIoLite._(this, namespace)
+          ..auth = auth
+          ..ackTimeout = ackTimeout;
     _sockets[namespace] = s;
     if (_engineConnected) s._sendConnect();
     return s;
@@ -145,7 +146,8 @@ class SocketManager {
     final backoff =
         reconnectionDelay.inMilliseconds * math.pow(2, reconnectAttempt - 1);
     final delayMs =
-        math.min(backoff, reconnectionDelayMax.inMilliseconds.toDouble())
+        math
+            .min(backoff, reconnectionDelayMax.inMilliseconds.toDouble())
             .toInt();
 
     for (final s in List<SocketIoLite>.from(_sockets.values)) {

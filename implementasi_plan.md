@@ -109,13 +109,16 @@ Fondasi paling penting & paling mudah dites. **Tanpa jaringan sama sekali.**
   - [x] Paket binary ditolak dengan `UnsupportedError` (ditunda ke Fase 9)
 - [x] `test/parser_test.dart` — 30 test lulus, `flutter analyze` bersih
 
-### Fase 2 — Transport abstraction + native
+### Fase 2 — Transport abstraction + native (SELESAI)
 
-- [ ] `transport/transport.dart` — interface: `connect(uri, headers)`,
-      `send(String)`, `Stream<String> get messages`, `onClose`, `close()`
-- [ ] `transport/transport_stub.dart` — stub
-- [ ] `transport/transport_io.dart` — `dart:io WebSocket` (native)
-- [ ] Conditional import terpasang; kompilasi bersih di Android/iOS/desktop
+- [x] `transport/transport.dart` — interface `SocketTransport`: `connect(uri, headers)`,
+      `send(String)`, `Stream<String> get messages`, `done`, `isConnected`, `close()`
+- [x] `transport/transport_stub.dart` — stub (lempar `UnsupportedError`)
+- [x] `transport/transport_io.dart` — `IoTransport` pakai `dart:io WebSocket` (native)
+- [x] `transport/transport_factory.dart` — conditional import (stub default,
+      `dart:io` saat native; Web jatuh ke stub sampai Fase 7)
+- [x] `test/transport_io_test.dart` — uji connect/send/echo/close pakai server
+      WebSocket loopback (`dart:io`, tanpa dependency); `flutter analyze` bersih
 
 ### Fase 3 — Lapisan Engine.IO
 

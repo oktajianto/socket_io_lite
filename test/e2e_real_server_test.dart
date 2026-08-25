@@ -1,4 +1,3 @@
-@TestOn('vm')
 @Tags(['e2e'])
 library;
 
@@ -8,8 +7,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:socket_io_lite/socket_io_lite.dart';
 
 /// End-to-end check against a real `socket.io` server running on
-/// ws://localhost:3000 (see example/server). Run manually with:
-///   flutter test test/e2e_real_server_test.dart
+/// ws://localhost:3000 (see example/server). Runs on both native and web
+/// (browser) transports. Run manually with:
+///   flutter test test/e2e_real_server_test.dart --tags e2e --run-skipped
+///   flutter test test/e2e_real_server_test.dart --platform chrome --tags e2e --run-skipped
 void main() {
   test('connects to a real socket.io server, emits and receives echo',
       () async {

@@ -173,12 +173,21 @@ Terverifikasi end-to-end ke server `socket.io` v4 asli.
 - [x] Test transport palsu: reconnect+onReconnect, give-up+onReconnectFailed,
       reconnection:false; e2e ke server asli tetap hijau
 
-### Fase 7 — Dukungan Web (dart:html)
+### Fase 7 — Dukungan Web (dart:html) (SELESAI)
 
-- [ ] `transport/transport_html.dart` — `dart:html WebSocket`
-- [ ] Verifikasi conditional import memilih transport yang benar saat build web
-- [ ] Uji `example` di Chrome (perhatikan CORS untuk polling — WebSocket bebas CORS)
-- [ ] **Milestone: satu API, jalan di native + web**
+- [x] `transport/transport_html.dart` — `HtmlTransport` pakai `dart:html WebSocket`
+      (zero-dep; lint web-only di-suppress dengan justifikasi)
+- [x] Conditional import diperluas: `if (dart.library.html) transport_html.dart`
+- [x] `flutter build web` example **sukses** (conditional import pilih transport web)
+- [x] E2E file dibuat bisa jalan di browser (`--platform chrome`); logika protokol
+      bersama sudah teruji penuh di VM
+- [ ] Uji runtime browser otomatis (`--platform chrome`) — **belum**: headless
+      Chrome tidak jalan di environment dev ini (hang). Perlu diuji manual di
+      Chrome nyata (`cd example && flutter run -d chrome`) atau CI dengan browser
+- [x] Catatan: dart:html = build JS standar; untuk `--wasm` perlu package:web
+      (ditunda ke Fase 9, agar tetap zero-dep)
+- [x] **Milestone: satu API, native + web (web: compile & build terverifikasi;
+      runtime browser menunggu uji manual/CI)**
 
 ### Fase 8 — Verifikasi desktop
 

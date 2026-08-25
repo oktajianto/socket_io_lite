@@ -138,6 +138,17 @@ you and exposes a simple `on`/`emit` API.
 | `socket.io` v2 / Engine.IO v3            | ❌ (use EIO v4 server) |
 | Raw WebSocket servers (non–Socket.IO)    | ❌ (different protocol) |
 
+### Platforms
+
+| Platform                    | Transport            |
+| --------------------------- | -------------------- |
+| Android · iOS · Win/mac/Linux | `dart:io` WebSocket |
+| Web                         | `dart:html` WebSocket |
+
+> On the web this uses `dart:html` (to stay dependency-free), which compiles
+> with the standard JS web build. The Wasm build (`flutter build web --wasm`)
+> is not supported yet.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

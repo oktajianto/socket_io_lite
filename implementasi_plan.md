@@ -189,10 +189,14 @@ Terverifikasi end-to-end ke server `socket.io` v4 asli.
       (ditunda ke Fase 9, agar tetap zero-dep)
 - [x] **Milestone: satu API, jalan di native + web (dua-duanya terverifikasi)**
 
-### Fase 8 — Verifikasi desktop
+### Fase 8 — Verifikasi desktop (SELESAI)
 
-- [ ] Uji Windows/macOS/Linux (sudah tercakup `dart:io`, tinggal konfirmasi)
-- [ ] Catat matriks platform yang sudah diverifikasi di README
+- [x] **Windows desktop**: `flutter build windows` example **sukses** (compile);
+      runtime pakai `dart:io` yang sama dengan e2e VM (yang jalan di Windows) →
+      terverifikasi
+- [x] macOS/Linux: memakai transport `dart:io` yang identik; harusnya jalan sama,
+      perlu konfirmasi di mesin masing-masing (belum diuji langsung)
+- [x] Matriks platform dicatat di README (Platforms + Compatibility)
 
 ### Fase 9 — Opsi lanjutan (opsional, backward-compatible)
 

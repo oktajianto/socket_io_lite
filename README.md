@@ -97,29 +97,41 @@ socket.onAny((event, data) => print('$event -> $data'));
 socket.onAck('ping', (data) => {'pong': true});
 ```
 
-### Multiple arguments (WebRTC-style signaling)
+### Multiple arguments
 
-`emit` is variadic, matching Socket.IO's `emit(event, ...args)` — handy for
-signaling servers that use several positional arguments:
+`emit` is variadic, matching Socket.IO's `emit(event, ...args)`. Pass as many
+positional arguments as the server expects:
 
 ```dart
-// emit('offer', id, description)  →  ["offer", id, description] on the wire
-socket.emit('offer', peerId, {'type': 'offer', 'sdp': sdp});
-socket.emit('candidate', peerId, candidate.toMap());
+socket.emit('move', x, y);                       // ["move", x, y]
+socket.emit('chat:message', roomId, text, tags); // three args
 ```
 
 When an incoming event carries several arguments, the handler receives them as
 a `List`:
 
 ```dart
-socket.on('offer', (data) {
+socket.on('move', (data) {
+  final x = data[0];
+  final y = data[1];
+});
+```
+
+This matches any server that uses multi-argument events. One common case is
+**WebRTC signaling** — where the plugin is a drop-in signaling channel for
+`flutter_webrtc` (media flows over WebRTC; you might play HLS via
+`video_player`):
+
+```dart
+// emit('offer', id, description)  →  ["offer", id, description] on the wire
+socket.emit('offer', peerId, {'type': 'offer', 'sdp': sdp});
+socket.emit('candidate', peerId, candidate.toMap());
+
+socket.on('answer', (data) {
   final id = data[0];
   final description = data[1];
 });
 ```
-
-This makes the plugin a drop-in signaling channel for `flutter_webrtc`, while
-the media itself flows over WebRTC (or you play HLS via `video_player`).
 
 ### Reconnection
 

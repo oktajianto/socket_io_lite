@@ -120,14 +120,19 @@ Fondasi paling penting & paling mudah dites. **Tanpa jaringan sama sekali.**
 - [x] `test/transport_io_test.dart` — uji connect/send/echo/close pakai server
       WebSocket loopback (`dart:io`, tanpa dependency); `flutter analyze` bersih
 
-### Fase 3 — Lapisan Engine.IO
+### Fase 3 — Lapisan Engine.IO (SELESAI)
 
-- [ ] `engine.dart`:
-  - [ ] Buka koneksi ke `.../socket.io/?EIO=4&transport=websocket`
-  - [ ] Terima `open` → simpan `sid`/interval/timeout
-  - [ ] **Heartbeat**: balas ping `2` → pong `3`; deteksi putus saat lewat `pingTimeout`
-  - [ ] Emit stream pesan level-Engine ke atas; tangani `close`
-- [ ] Uji manual konek ke server lokal (echo)
+- [x] `engine.dart`:
+  - [x] `EngineIo.buildUri` → `.../socket.io/?EIO=4&transport=websocket` (scheme
+        http/https dinormalkan ke ws/wss)
+  - [x] `open()` → terima `open`, parse & simpan `Handshake` (sid/interval/timeout)
+  - [x] **Heartbeat v4**: balas ping `2` → pong `3`; watchdog putus saat lewat
+        `pingInterval + pingTimeout`
+  - [x] `send()` bungkus payload jadi frame message `4…`; `messages` meng-unwrap;
+        tangani frame `close`; `done` saat koneksi tutup
+  - [x] Injectable `transportFactory` untuk test
+- [x] `test/engine_test.dart` — handshake, echo message, ping→pong, heartbeat
+      timeout, close-sebelum-handshake (pakai server Engine.IO loopback)
 
 ### Fase 4 — Lapisan Socket.IO + facade (MVP bisa dipakai)
 

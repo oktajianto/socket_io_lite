@@ -181,13 +181,13 @@ Terverifikasi end-to-end ke server `socket.io` v4 asli.
 - [x] `flutter build web` example **sukses** (conditional import pilih transport web)
 - [x] E2E file dibuat bisa jalan di browser (`--platform chrome`); logika protokol
       bersama sudah teruji penuh di VM
-- [ ] Uji runtime browser otomatis (`--platform chrome`) — **belum**: headless
-      Chrome tidak jalan di environment dev ini (hang). Perlu diuji manual di
-      Chrome nyata (`cd example && flutter run -d chrome`) atau CI dengan browser
+- [x] **Runtime browser TERVERIFIKASI manual** — `flutter run -d chrome` ke server
+      asli: connect (dapat sid), emit, dan terima echo semuanya jalan. (Uji
+      otomatis `--platform chrome` hang di environment dev karena headless Chrome;
+      verifikasi dilakukan di Chrome nyata.)
 - [x] Catatan: dart:html = build JS standar; untuk `--wasm` perlu package:web
       (ditunda ke Fase 9, agar tetap zero-dep)
-- [x] **Milestone: satu API, native + web (web: compile & build terverifikasi;
-      runtime browser menunggu uji manual/CI)**
+- [x] **Milestone: satu API, jalan di native + web (dua-duanya terverifikasi)**
 
 ### Fase 8 — Verifikasi desktop
 

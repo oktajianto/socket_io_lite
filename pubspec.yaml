@@ -1,0 +1,35 @@
+name: socket_io_lite
+description: >-
+  Lightweight, zero-dependency Socket.IO client for Dart & Flutter.
+version: 0.1.0
+homepage: https://github.com/oktajianto/socket_io_lite
+repository: https://github.com/oktajianto/socket_io_lite
+issue_tracker: https://github.com/oktajianto/socket_io_lite/issues
+
+topics:
+  - socket-io
+  - websocket
+  - realtime
+  - engine-io
+  - networking
+
+# Floor covers the newest framework API used (Color.withValues, Flutter 3.27 /
+# Dart 3.6) and the modern "tall" formatter style (Dart 3.7+).
+environment:
+  sdk: ">=3.7.0 <4.0.0"
+  flutter: ">=3.29.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+# For information on the generic Dart part of this file, see the
+# following page: https://dart.dev/tools/pub/pubspec
+
+# The following section is specific to Flutter packages.
+flutter:

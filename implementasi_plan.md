@@ -1,0 +1,205 @@
+# Implementation Plan — socket_io_lite
+
+Rencana pengembangan plugin **Socket.IO client** untuk Dart & Flutter, target
+publish ke [pub.dev](https://pub.dev). Dikerjakan **bertahap** — satu fase
+selesai & teruji dulu sebelum lanjut, bukan semua serentak.
+
+## Visi
+
+Socket.IO client yang **ringan, murni Dart, dan tanpa satu pun dependency**,
+tapi **kompatibel penuh dengan server Socket.IO asli** (Node.js, NestJS). Bisa
+dipakai di **semua platform Flutter** — Android, iOS, Web, Windows, macOS, Linux
+— lewat satu API yang sama.
+
+## Prinsip Desain
+
+1. **Zero dependency** — hanya Dart SDK (`dart:io`/`dart:html` WebSocket bawaan,
+   `dart:convert`, `dart:async`). Tidak ada package dari pub. Maintenance ringan,
+   skor pub.dev tinggi.
+2. **Standard-compatible** — bicara frame Engine.IO v4 / Socket.IO v4 yang sama
+   dengan client JS resmi. Server tidak bisa membedakan.
+3. **Semua platform** — abstraksi transport + **conditional import** supaya API
+   publik identik di native dan Web.
+4. **Core yang bisa dites** — parser paket dibuat **murni** (string in → objek
+   out), diuji tanpa jaringan.
+5. **Wajib minimal, opsional banyak** — `connect` + `on` + `emit` cukup untuk
+   kasus dasar; auth, query, reconnect policy, dsb. lewat opsi.
+
+## Kompetitor (yang harus kita kalahkan)
+
+| Package | Kekuatan | Celah yang kita ambil |
+|---|---|---|
+| `socket_io_client` | Paling populer, fitur lengkap | Sering telat ngejar versi protokol; API relatif berat |
+| `web_socket_channel` | Resmi tim Dart, multiplatform | **Bukan** Socket.IO — WebSocket mentah saja |
+| `socket_io` (server) | Sisi server Dart | Bukan client |
+
+**Pembeda utama kita:** benar-benar zero-dep, fokus Socket.IO v4 modern, core
+parser yang teruji, dan jalan di semua platform lewat satu API.
+
+## Arsitektur Teknis
+
+Socket.IO = dua lapisan di atas WebSocket:
+
+- **Engine.IO** — transport & heartbeat. Frame diawali 1 digit: `0` open, `1`
+  close, `2` ping, `3` pong, `4` message.
+- **Socket.IO** — di dalam frame `4`. Digit berikut: `0` CONNECT, `1`
+  DISCONNECT, `2` EVENT, `3` ACK, `4` CONNECT_ERROR.
+
+Contoh event di kabel: `42["chat:message",{"text":"halo"}]`.
+
+**Strategi multiplatform (kunci "semua platform + zero-dep"):**
+
+- Abstraksi `SocketTransport` (interface) → dua implementasi:
+  - **Native** (Android/iOS/desktop): `WebSocket` dari `dart:io`.
+  - **Web**: `WebSocket` dari `dart:html` (SDK, tetap zero pub-dependency).
+- Disatukan lewat **conditional import**:
+  ```dart
+  import 'transport/transport_stub.dart'
+    if (dart.library.io)   'transport/transport_io.dart'
+    if (dart.library.html) 'transport/transport_html.dart';
+  ```
+- **Transport awal: WebSocket-only** (`?EIO=4&transport=websocket`). Didukung
+  penuh server Socket.IO. Fallback HTTP long-polling ditunda (lihat Fase
+  lanjutan) karena jarang dibutuhkan app dan menambah kompleksitas besar.
+
+## Struktur File
+
+```
+lib/
+  socket_io_lite.dart              # barrel export (public API)
+  src/
+    parser.dart                    # encode/decode paket Engine.IO + Socket.IO (MURNI)
+    packet.dart                    # model paket (tipe, namespace, data, ackId)
+    engine.dart                    # Engine.IO: handshake, heartbeat, close
+    socket.dart                    # Socket.IO: namespace, on/emit/ack (facade SocketIoLite)
+    options.dart                   # SocketOptions (auth, query, reconnect, headers)
+    transport/
+      transport.dart               # interface SocketTransport
+      transport_stub.dart          # stub (lempar UnsupportedError)
+      transport_io.dart            # dart:io WebSocket (native)
+      transport_html.dart          # dart:html WebSocket (web)
+example/
+  lib/main.dart                    # demo connect/on/emit/ack
+  server/                          # server Node/NestJS minimal untuk uji end-to-end
+test/
+  parser_test.dart                 # uji parser tanpa jaringan
+  socket_test.dart                 # uji dispatch event/ack (transport palsu)
+```
+
+## Roadmap Bertahap
+
+### Fase 0 — Scaffolding (SELESAI)
+
+- [x] `pubspec.yaml` (nama, deskripsi, topics, constraint SDK/Flutter)
+- [x] `README.md` dengan badge sesuai standar plugin, penjelasan protokol
+- [x] `LICENSE` (MIT), `CHANGELOG.md`, `analysis_options.yaml`, `.gitignore`
+
+### Fase 1 — Parser murni (BERIKUTNYA)
+
+Fondasi paling penting & paling mudah dites. **Tanpa jaringan sama sekali.**
+
+- [ ] `packet.dart` — model paket: `enum EnginePacketType`, `enum SocketPacketType`,
+      class `Packet { type, namespace, data, ackId }`
+- [ ] `parser.dart`:
+  - [ ] `encode(Packet) -> String` (mis. EVENT → `42["ev",args]`, dengan ackId)
+  - [ ] `decode(String) -> Packet` (baca prefix Engine.IO + Socket.IO + JSON)
+  - [ ] Tangani namespace non-default (`42/admin,["ev",...]`)
+  - [ ] Tangani handshake `0{...}` → ekstrak `sid`, `pingInterval`, `pingTimeout`
+- [ ] `test/parser_test.dart` — round-trip encode/decode, edge case (ack, ns, kosong)
+
+### Fase 2 — Transport abstraction + native
+
+- [ ] `transport/transport.dart` — interface: `connect(uri, headers)`,
+      `send(String)`, `Stream<String> get messages`, `onClose`, `close()`
+- [ ] `transport/transport_stub.dart` — stub
+- [ ] `transport/transport_io.dart` — `dart:io WebSocket` (native)
+- [ ] Conditional import terpasang; kompilasi bersih di Android/iOS/desktop
+
+### Fase 3 — Lapisan Engine.IO
+
+- [ ] `engine.dart`:
+  - [ ] Buka koneksi ke `.../socket.io/?EIO=4&transport=websocket`
+  - [ ] Terima `open` → simpan `sid`/interval/timeout
+  - [ ] **Heartbeat**: balas ping `2` → pong `3`; deteksi putus saat lewat `pingTimeout`
+  - [ ] Emit stream pesan level-Engine ke atas; tangani `close`
+- [ ] Uji manual konek ke server lokal (echo)
+
+### Fase 4 — Lapisan Socket.IO + facade (MVP bisa dipakai)
+
+Target: **client bisa nyambung ke NestJS/Node asli, kirim & terima event.**
+
+- [ ] `socket.dart` — `SocketIoLite`:
+  - [ ] `SocketIoLite.connect(url, {options})`
+  - [ ] Kirim CONNECT `40` (namespace default), tunggu balasan
+  - [ ] `on(event, handler)` / `off(event)` — dispatch dari frame `42`
+  - [ ] `emit(event, data)` → `42[...]`
+  - [ ] `onConnect` / `onDisconnect` / `onError`
+- [ ] `socket_io_lite.dart` — barrel export
+- [ ] `example/server/` — server Node/NestJS minimal (echo)
+- [ ] `example/lib/main.dart` — demo connect + on + emit
+- [ ] `test/socket_test.dart` — dispatch event pakai transport palsu
+- [ ] **Milestone: rilis internal v0.1.0-dev — MVP jalan di native**
+
+### Fase 5 — Acknowledgements
+
+- [ ] `emitWithAck(event, data) -> Future` — generate ackId, kirim `42<id>[...]`
+- [ ] Terima ACK `43<id>[...]` → complete Future yang cocok
+- [ ] Timeout ack opsional (`ackTimeout`)
+- [ ] Test round-trip ack
+
+### Fase 6 — Reconnection & connection state
+
+- [ ] Exponential backoff (`reconnect`, `reconnectDelay`, `maxReconnectAttempts`)
+- [ ] Event: `onReconnectAttempt`, `onReconnect`, `onReconnectFailed`
+- [ ] Re-join namespace + re-attach listener setelah reconnect
+- [ ] Test dengan transport palsu yang men-drop koneksi
+
+### Fase 7 — Dukungan Web (dart:html)
+
+- [ ] `transport/transport_html.dart` — `dart:html WebSocket`
+- [ ] Verifikasi conditional import memilih transport yang benar saat build web
+- [ ] Uji `example` di Chrome (perhatikan CORS untuk polling — WebSocket bebas CORS)
+- [ ] **Milestone: satu API, jalan di native + web**
+
+### Fase 8 — Verifikasi desktop
+
+- [ ] Uji Windows/macOS/Linux (sudah tercakup `dart:io`, tinggal konfirmasi)
+- [ ] Catat matriks platform yang sudah diverifikasi di README
+
+### Fase 9 — Opsi lanjutan (opsional, backward-compatible)
+
+Diurutkan dari nilai tertinggi.
+
+**Prioritas tinggi**
+- [ ] `options.dart` — `auth` payload (dikirim di CONNECT), `query` params, `extraHeaders`
+- [ ] Namespace ganda (`socket.of('/admin')`)
+- [ ] `onAny(handler)` untuk menangkap semua event
+
+**Prioritas menengah**
+- [ ] Dukungan **binary** (BINARY_EVENT `45` / BINARY_ACK `46` + attachment placeholder)
+- [ ] Rooms hanya diatur server; pastikan event broadcast diterima benar
+
+**Prioritas rendah (nice-to-have)**
+- [ ] Fallback **HTTP long-polling** + upgrade ke WebSocket (paritas penuh client resmi)
+- [ ] Kompatibilitas Engine.IO v3 / Socket.IO v2 (opsional, di belakang flag)
+- [ ] Volatile emit
+
+### Fase 10 — Polish & rilis pub.dev
+
+- [ ] Dartdoc pada seluruh API publik
+- [ ] README final + contoh lengkap + GIF/diagram + matriks kompatibilitas
+- [ ] `.github/workflows/ci.yml` (analyze + test) → badge CI hidup
+- [ ] `.pubignore` (kecualikan `example/server`, build)
+- [ ] `dart pub publish --dry-run` bersih (0 warning)
+- [ ] **Publish v0.1.0**
+
+## Keputusan yang Sudah Diambil
+
+- **Nama package:** `socket_io_lite` (tersedia di pub.dev).
+- **Target protokol:** Engine.IO v4 / Socket.IO v4 (server modern). v2/v3 opsional nanti.
+- **Transport awal:** WebSocket-only; long-polling ditunda.
+- **Multiplatform:** conditional import (`dart:io` native, `dart:html` web).
+- **Bahasa dokumentasi:** Inggris (kode & README); plan ini Indonesia.
+- **Lisensi:** MIT.
+- **Urutan kerja:** parser → transport → engine → socket (MVP) → ack → reconnect
+  → web → desktop → opsi lanjutan → rilis. **Satu fase tuntas & teruji sebelum lanjut.**

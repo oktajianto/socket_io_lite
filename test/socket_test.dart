@@ -268,6 +268,63 @@ void main() {
     expect(called, isTrue);
   });
 
+  group('event helpers', () {
+    Future<SocketIoLite> connected(FakeTransport fake) async {
+      final socket =
+          SocketIoLite.connect('ws://x', transportFactory: () => fake);
+      fake.serverSend(_openFrame);
+      await pump();
+      fake.serverSend('40{"sid":"abc"}');
+      await pump();
+      return socket;
+    }
+
+    test('once fires only for the first matching event', () async {
+      final fake = FakeTransport();
+      final socket = await connected(fake);
+      addTearDown(socket.dispose);
+
+      var count = 0;
+      socket.once('ping', (_) => count++);
+
+      fake.serverSend('42["ping"]');
+      fake.serverSend('42["ping"]');
+      await pump();
+
+      expect(count, 1);
+    });
+
+    test('onAny receives every event with name and payload', () async {
+      final fake = FakeTransport();
+      final socket = await connected(fake);
+      addTearDown(socket.dispose);
+
+      final seen = <String>[];
+      socket.onAny((event, data) => seen.add('$event:$data'));
+
+      fake.serverSend('42["a",1]');
+      fake.serverSend('42["b",{"x":2}]');
+      await pump();
+
+      expect(seen, ['a:1', 'b:{x: 2}']);
+    });
+
+    test('onAck responds to an ack-requesting event', () async {
+      final fake = FakeTransport();
+      final socket = await connected(fake);
+      addTearDown(socket.dispose);
+
+      socket.onAck('needs-ack', (data) => {'answer': 42});
+
+      // Server event with ack id 5.
+      fake.serverSend('425["needs-ack",{"q":1}]');
+      await pump();
+
+      // Client should reply with an ACK for id 5.
+      expect(fake.sent, contains('435[{"answer":42}]'));
+    });
+  });
+
   group('reconnection', () {
     test('reconnects with a fresh engine and fires onReconnect', () async {
       final fakes = <FakeTransport>[];

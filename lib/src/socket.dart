@@ -22,6 +22,13 @@ typedef ErrorHandler = void Function(Object error);
 /// [SocketIoLite.onReconnectAttempt]). [attempt] is the 1-based attempt count.
 typedef ReconnectHandler = void Function(int attempt);
 
+/// Handler for [SocketIoLite.onAny], receiving every event's name and payload.
+typedef AnyEventHandler = void Function(String event, dynamic data);
+
+/// Handler for [SocketIoLite.onAck]. Its return value (awaited if a `Future`)
+/// is sent back to the server as the acknowledgement.
+typedef AckEventHandler = FutureOr<Object?> Function(dynamic data);
+
 /// A lightweight, zero-dependency Socket.IO client (Engine.IO v4 / Socket.IO
 /// v4).
 ///
@@ -66,6 +73,8 @@ class SocketIoLite {
   Duration? ackTimeout;
 
   final Map<String, List<EventHandler>> _listeners = {};
+  final List<AnyEventHandler> _anyListeners = [];
+  final Map<String, AckEventHandler> _ackHandlers = {};
   final List<LifecycleHandler> _onConnect = [];
   final List<LifecycleHandler> _onDisconnect = [];
   final List<ErrorHandler> _onError = [];
@@ -226,9 +235,35 @@ class SocketIoLite {
     final payload = _payloadOf(data.sublist(1));
 
     final handlers = _listeners[event];
-    if (handlers == null) return;
-    for (final handler in List<EventHandler>.from(handlers)) {
-      handler(payload);
+    if (handlers != null) {
+      for (final handler in List<EventHandler>.from(handlers)) {
+        handler(payload);
+      }
+    }
+
+    for (final handler in List<AnyEventHandler>.from(_anyListeners)) {
+      handler(event, payload);
+    }
+
+    // If the server expects an acknowledgement and a responder is registered,
+    // send its return value back under the same ack id.
+    final ackId = packet.ackId;
+    if (ackId != null) {
+      final responder = _ackHandlers[event];
+      if (responder != null) {
+        Future.sync(() => responder(payload)).then((result) {
+          _sendOrBuffer(
+            SocketParser.encode(
+              SocketPacket(
+                type: SocketPacketType.ack,
+                namespace: namespace,
+                data: result == null ? const [] : [result],
+                ackId: ackId,
+              ),
+            ),
+          );
+        });
+      }
     }
   }
 
@@ -246,6 +281,37 @@ class SocketIoLite {
       _listeners[event]?.remove(handler);
     }
   }
+
+  /// Registers [handler] for [event], firing it at most once.
+  void once(String event, EventHandler handler) {
+    late EventHandler wrapper;
+    wrapper = (data) {
+      off(event, wrapper);
+      handler(data);
+    };
+    on(event, wrapper);
+  }
+
+  /// Registers [handler] to receive every incoming event as `(name, payload)`.
+  void onAny(AnyEventHandler handler) => _anyListeners.add(handler);
+
+  /// Removes a specific catch-all [handler], or all of them when omitted.
+  void offAny([AnyEventHandler? handler]) {
+    if (handler == null) {
+      _anyListeners.clear();
+    } else {
+      _anyListeners.remove(handler);
+    }
+  }
+
+  /// Registers an acknowledgement responder for [event]: when the server emits
+  /// [event] expecting an ack, [handler]'s return value is sent back.
+  void onAck(String event, AckEventHandler handler) {
+    _ackHandlers[event] = handler;
+  }
+
+  /// Removes the acknowledgement responder for [event].
+  void offAck(String event) => _ackHandlers.remove(event);
 
   /// Emits [event] with an optional [data] payload. Buffered until connected.
   void emit(String event, [Object? data]) {

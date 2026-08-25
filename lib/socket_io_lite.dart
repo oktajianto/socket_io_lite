@@ -10,5 +10,7 @@ export 'src/socket.dart'
         EventHandler,
         LifecycleHandler,
         ErrorHandler,
-        ReconnectHandler;
+        ReconnectHandler,
+        AnyEventHandler,
+        AckEventHandler;
 export 'src/packet.dart' show Handshake;

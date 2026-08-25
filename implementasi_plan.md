@@ -198,22 +198,27 @@ Terverifikasi end-to-end ke server `socket.io` v4 asli.
       perlu konfirmasi di mesin masing-masing (belum diuji langsung)
 - [x] Matriks platform dicatat di README (Platforms + Compatibility)
 
-### Fase 9 — Opsi lanjutan (opsional, backward-compatible)
+### Fase 9 — Opsi lanjutan (SEDANG DIKERJAKAN)
 
 Diurutkan dari nilai tertinggi.
 
 **Prioritas tinggi**
-- [ ] `options.dart` — `auth` payload (dikirim di CONNECT), `query` params, `extraHeaders`
-- [ ] Namespace ganda (`socket.of('/admin')`)
-- [ ] `onAny(handler)` untuk menangkap semua event
+- [x] `auth` payload (dikirim di CONNECT), `query` params, `headers` — sudah sejak Fase 4
+- [x] `onAny(handler)` / `offAny()` untuk menangkap semua event
+- [x] `once(event, handler)` — listener sekali pakai
+- [x] `onAck(event, handler)` — balas ack saat server mengirim event ber-ack
+- [~] Namespace ganda `socket.of('/admin')` (share 1 koneksi) — **ditunda**;
+      namespace terpisah (koneksi sendiri) sudah jalan via param `namespace`.
+      `of()` butuh refactor Manager/Socket, ditunda karena hanya optimasi
 
 **Prioritas menengah**
 - [ ] Dukungan **binary** (BINARY_EVENT `45` / BINARY_ACK `46` + attachment placeholder)
-- [ ] Rooms hanya diatur server; pastikan event broadcast diterima benar
+- [x] Rooms diatur server; event broadcast diterima benar (sudah terverifikasi)
 
 **Prioritas rendah (nice-to-have)**
 - [ ] Fallback **HTTP long-polling** + upgrade ke WebSocket (paritas penuh client resmi)
 - [ ] Kompatibilitas Engine.IO v3 / Socket.IO v2 (opsional, di belakang flag)
+- [ ] Dukungan `--wasm` (butuh package:web, trade-off zero-dep)
 - [ ] Volatile emit
 
 ### Fase 10 — Polish & rilis pub.dev

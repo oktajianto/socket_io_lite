@@ -14,6 +14,8 @@ Work in progress — see `implementasi_plan.md`.
 - Automatic reconnection with exponential backoff (`reconnection`,
   `reconnectionAttempts`, `reconnectionDelay`, `reconnectionDelayMax`) and
   `onReconnect` / `onReconnectAttempt` / `onReconnectFailed`.
+- Event helpers: `once`, `onAny` / `offAny`, and `onAck` / `offAck` (respond to
+  server events that expect an acknowledgement).
 - Web support via `dart:html` WebSocket, selected automatically through a
   conditional import — one API across native, web, and desktop. The web build
   compiles and shares the same protocol layer that is tested on the VM.

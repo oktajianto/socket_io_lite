@@ -81,6 +81,49 @@ print('ack: $reply');
 socket.dispose();
 ```
 
+### More listeners
+
+```dart
+// Fire once, then auto-remove
+socket.once('welcome', (data) => print(data));
+
+// Catch every event (great for debugging/logging)
+socket.onAny((event, data) => print('$event -> $data'));
+
+// Respond when the server emits an event expecting an acknowledgement;
+// the return value is sent back as the ack.
+socket.onAck('ping', (data) => {'pong': true});
+```
+
+### Reconnection
+
+Enabled by default with exponential backoff. Tune it via `connect`:
+
+```dart
+final socket = SocketIoLite.connect(
+  'ws://localhost:3000',
+  reconnection: true,           // default
+  reconnectionAttempts: null,   // null = unlimited
+  reconnectionDelay: Duration(seconds: 1),
+  reconnectionDelayMax: Duration(seconds: 5),
+);
+
+socket.onReconnect((attempt) => print('reconnected after $attempt tries'));
+socket.onReconnectAttempt((attempt) => print('retrying #$attempt'));
+socket.onReconnectFailed(() => print('gave up'));
+```
+
+### Namespaces & auth
+
+```dart
+final admin = SocketIoLite.connect(
+  'ws://localhost:3000',
+  namespace: '/admin',
+  auth: {'token': 'secret'},   // sent with the CONNECT packet
+  query: {'v': '1'},           // appended to the handshake URL
+);
+```
+
 ### Connecting to localhost during development
 
 `localhost` inside an emulator/simulator does **not** mean your PC. Use the

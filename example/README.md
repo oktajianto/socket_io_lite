@@ -36,9 +36,10 @@ Set the **Server URL** for your target:
 
 ## What's demonstrated
 
-- [`lib/main.dart`](lib/main.dart) — a runnable app: connect/disconnect,
-  `emit`, `emitWithAck`, lifecycle + reconnection callbacks, `once`, and
-  `onAny`.
-- [`lib/feature_tour.dart`](lib/feature_tour.dart) — a compile-checked reference
-  covering **every** API: namespaces & `of()`, auth/query/headers, multi-argument
-  emit, `onAck`, listener removal, and reconnection tuning.
+Everything lives in [`lib/main.dart`](lib/main.dart):
+
+- A **runnable app** — connect/disconnect, `emit`, `emitWithAck`, lifecycle +
+  reconnection callbacks, `once`, and `onAny`.
+- A `featureTour()` reference function covering **every** API: namespaces &
+  `of()`, auth/query/headers, multi-argument emit, `onAck`, listener removal,
+  and reconnection tuning.

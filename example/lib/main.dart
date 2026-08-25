@@ -36,7 +36,14 @@ class _ChatPageState extends State<ChatPage> {
     _socket?.dispose();
     _append('Connecting to ${_urlController.text} ...');
 
-    final socket = SocketIoLite.connect(_urlController.text);
+    final socket = SocketIoLite.connect(
+      _urlController.text,
+      // Reconnection is on by default; shown here for illustration.
+      reconnection: true,
+      reconnectionDelay: const Duration(seconds: 1),
+    );
+
+    // Lifecycle
     socket.onConnect((_) {
       setState(() => _connected = true);
       _append('Connected (id: ${socket.id})');
@@ -46,7 +53,20 @@ class _ChatPageState extends State<ChatPage> {
       _append('Disconnected');
     });
     socket.onError((e) => _append('Error: $e'));
+
+    // Reconnection
+    socket.onReconnectAttempt((n) => _append('Reconnecting… (attempt $n)'));
+    socket.onReconnect((n) => _append('Reconnected after $n attempt(s)'));
+    socket.onReconnectFailed(() => _append('Reconnect gave up'));
+
+    // Events
     socket.on('chat:message', (data) => _append('Received: $data'));
+
+    // once: fires at most one time
+    socket.once('welcome', (data) => _append('Welcome (once): $data'));
+
+    // onAny: catch-all, handy for debugging
+    socket.onAny((event, data) => _append('· any: $event -> $data'));
 
     _socket = socket;
   }
@@ -54,9 +74,27 @@ class _ChatPageState extends State<ChatPage> {
   void _send() {
     final socket = _socket;
     if (socket == null) return;
-    final text = _messageController.text;
-    socket.emit('chat:message', {'text': text});
-    _append('Sent: $text');
+    socket.emit('chat:message', {'text': _messageController.text});
+    _append('Sent: ${_messageController.text}');
+  }
+
+  Future<void> _sendWithAck() async {
+    final socket = _socket;
+    if (socket == null) return;
+    _append('Sending (awaiting ack): ${_messageController.text}');
+    try {
+      final ack = await socket.emitWithAck('chat:message', {
+        'text': _messageController.text,
+      });
+      _append('Ack: $ack');
+    } catch (e) {
+      _append('Ack failed: $e');
+    }
+  }
+
+  Future<void> _disconnect() async {
+    await _socket?.disconnect();
+    _socket = null;
   }
 
   void _append(String line) => setState(() => _log.insert(0, line));
@@ -97,27 +135,46 @@ class _ChatPageState extends State<ChatPage> {
               ),
             ),
             const SizedBox(height: 8),
-            FilledButton.icon(
-              onPressed: _connect,
-              icon: const Icon(Icons.link),
-              label: const Text('Connect'),
-            ),
-            const Divider(height: 32),
             Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    decoration: const InputDecoration(
-                      labelText: 'Message',
-                      border: OutlineInputBorder(),
-                    ),
+                  child: FilledButton.icon(
+                    onPressed: _connect,
+                    icon: const Icon(Icons.link),
+                    label: const Text('Connect'),
                   ),
                 ),
                 const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: _connected ? _send : null,
-                  child: const Text('Send'),
+                OutlinedButton.icon(
+                  onPressed: _connected ? _disconnect : null,
+                  icon: const Icon(Icons.link_off),
+                  label: const Text('Disconnect'),
+                ),
+              ],
+            ),
+            const Divider(height: 32),
+            TextField(
+              controller: _messageController,
+              decoration: const InputDecoration(
+                labelText: 'Message',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _connected ? _send : null,
+                    child: const Text('Send'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton.tonal(
+                    onPressed: _connected ? _sendWithAck : null,
+                    child: const Text('Send + ack'),
+                  ),
                 ),
               ],
             ),

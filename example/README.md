@@ -33,3 +33,12 @@ Set the **Server URL** for your target:
 | Flutter Web / Desktop | `ws://localhost:3000`        |
 
 > On Android, allow cleartext (`ws://`) for debug builds — see the main README.
+
+## What's demonstrated
+
+- [`lib/main.dart`](lib/main.dart) — a runnable app: connect/disconnect,
+  `emit`, `emitWithAck`, lifecycle + reconnection callbacks, `once`, and
+  `onAny`.
+- [`lib/feature_tour.dart`](lib/feature_tour.dart) — a compile-checked reference
+  covering **every** API: namespaces & `of()`, auth/query/headers, multi-argument
+  emit, `onAck`, listener removal, and reconnection tuning.

@@ -94,18 +94,20 @@ test/
 - [x] `README.md` dengan badge sesuai standar plugin, penjelasan protokol
 - [x] `LICENSE` (MIT), `CHANGELOG.md`, `analysis_options.yaml`, `.gitignore`
 
-### Fase 1 — Parser murni (BERIKUTNYA)
+### Fase 1 — Parser murni (SELESAI)
 
 Fondasi paling penting & paling mudah dites. **Tanpa jaringan sama sekali.**
 
-- [ ] `packet.dart` — model paket: `enum EnginePacketType`, `enum SocketPacketType`,
-      class `Packet { type, namespace, data, ackId }`
-- [ ] `parser.dart`:
-  - [ ] `encode(Packet) -> String` (mis. EVENT → `42["ev",args]`, dengan ackId)
-  - [ ] `decode(String) -> Packet` (baca prefix Engine.IO + Socket.IO + JSON)
-  - [ ] Tangani namespace non-default (`42/admin,["ev",...]`)
-  - [ ] Tangani handshake `0{...}` → ekstrak `sid`, `pingInterval`, `pingTimeout`
-- [ ] `test/parser_test.dart` — round-trip encode/decode, edge case (ack, ns, kosong)
+- [x] `packet.dart` — model paket: `enum EnginePacketType`, `enum SocketPacketType`,
+      `EnginePacket`, `SocketPacket { type, namespace, data, ackId }`, `Handshake`
+- [x] `parser.dart`:
+  - [x] `EngineParser.encode/decode` (prefix Engine.IO 1 digit)
+  - [x] `SocketParser.encode(SocketPacket) -> String` (EVENT → `2["ev",args]`, dengan ackId)
+  - [x] `SocketParser.decode(String) -> SocketPacket` (type + namespace + ackId + JSON)
+  - [x] Namespace non-default (`2/admin,["ev",...]`); koma di payload tak salah-baca
+  - [x] Handshake `0{...}` → `sid`, `pingInterval`, `pingTimeout`, `upgrades`, `maxPayload`
+  - [x] Paket binary ditolak dengan `UnsupportedError` (ditunda ke Fase 9)
+- [x] `test/parser_test.dart` — 30 test lulus, `flutter analyze` bersih
 
 ### Fase 2 — Transport abstraction + native
 

@@ -325,6 +325,80 @@ void main() {
     });
   });
 
+  group('of() multi-namespace', () {
+    test('shares one connection and connects both namespaces', () async {
+      final fakes = <FakeTransport>[];
+      FakeTransport factory() {
+        final f = FakeTransport();
+        fakes.add(f);
+        return f;
+      }
+
+      final root = SocketIoLite.connect('ws://x', transportFactory: factory);
+      final admin = root.of('/admin');
+      addTearDown(() async {
+        await admin.dispose();
+        await root.dispose();
+      });
+
+      fakes[0].serverSend(_openFrame);
+      await pump();
+
+      // Only ONE transport, and both namespaces requested CONNECT over it.
+      expect(fakes.length, 1);
+      expect(fakes[0].sent, containsAll(['40', '40/admin,']));
+
+      fakes[0].serverSend('40{"sid":"r"}');
+      fakes[0].serverSend('40/admin,{"sid":"a"}');
+      await pump();
+
+      expect(root.connected, isTrue);
+      expect(admin.connected, isTrue);
+      expect(root.id, 'r');
+      expect(admin.id, 'a');
+    });
+
+    test('routes events and emits to the right namespace', () async {
+      final fake = FakeTransport();
+      final root = SocketIoLite.connect('ws://x', transportFactory: () => fake);
+      final admin = root.of('/admin');
+      addTearDown(() async {
+        await admin.dispose();
+        await root.dispose();
+      });
+
+      fake.serverSend(_openFrame);
+      await pump();
+      fake.serverSend('40{"sid":"r"}');
+      fake.serverSend('40/admin,{"sid":"a"}');
+      await pump();
+
+      dynamic rootGot;
+      dynamic adminGot;
+      root.on('msg', (d) => rootGot = d);
+      admin.on('msg', (d) => adminGot = d);
+
+      fake.serverSend('42["msg","for-root"]');
+      fake.serverSend('42/admin,["msg","for-admin"]');
+      await pump();
+
+      expect(rootGot, 'for-root');
+      expect(adminGot, 'for-admin');
+
+      // Emits carry the namespace prefix.
+      admin.emit('do', 1);
+      expect(fake.sent, contains('42/admin,["do",1]'));
+    });
+
+    test('of() returns the same instance for a namespace', () async {
+      final fake = FakeTransport();
+      final root = SocketIoLite.connect('ws://x', transportFactory: () => fake);
+      addTearDown(root.dispose);
+
+      expect(identical(root.of('/admin'), root.of('/admin')), isTrue);
+    });
+  });
+
   group('reconnection', () {
     test('reconnects with a fresh engine and fires onReconnect', () async {
       final fakes = <FakeTransport>[];

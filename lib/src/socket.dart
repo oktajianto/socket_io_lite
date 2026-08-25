@@ -6,6 +6,8 @@ import 'packet.dart';
 import 'parser.dart';
 import 'transport/transport.dart';
 
+part 'manager.dart';
+
 /// Handler for a Socket.IO event. [data] is the event's payload — the single
 /// argument when the event carries one, a `List` when it carries several, or
 /// `null` when it carries none.
@@ -39,34 +41,27 @@ typedef AckEventHandler = FutureOr<Object?> Function(dynamic data);
 /// socket.emit('chat:message', {'text': 'halo'});
 /// ```
 ///
+/// A [SocketIoLite] is scoped to a single [namespace]. Additional namespaces on
+/// the **same** underlying connection are obtained with [of]:
+///
+/// ```dart
+/// final admin = socket.of('/admin'); // shares one WebSocket
+/// ```
+///
 /// [emit] calls made before the connection is established are buffered and
 /// flushed once the server acknowledges the connection. When the connection
-/// drops, the socket reconnects automatically with exponential backoff (unless
-/// disabled), re-running the namespace CONNECT and keeping all listeners.
+/// drops, it reconnects automatically with exponential backoff (unless
+/// disabled), re-running each namespace's CONNECT and keeping all listeners.
 class SocketIoLite {
-  SocketIoLite._(this._uri, this.namespace);
+  SocketIoLite._(this._manager, this.namespace);
 
-  final Uri _uri;
+  final SocketManager _manager;
 
   /// The namespace this socket is attached to. Defaults to the root `/`.
   final String namespace;
 
-  // Connection configuration.
-  Map<String, dynamic>? _auth;
-  Map<String, dynamic>? _headers;
-  SocketTransport Function()? _transportFactory;
-
-  /// Whether to reconnect automatically after a drop. Default `true`.
-  bool reconnection = true;
-
-  /// Maximum reconnection attempts before giving up. `null` means unlimited.
-  int? reconnectionAttempts;
-
-  /// Base backoff delay; doubles each attempt up to [reconnectionDelayMax].
-  Duration reconnectionDelay = const Duration(seconds: 1);
-
-  /// Upper bound for the backoff delay.
-  Duration reconnectionDelayMax = const Duration(seconds: 5);
+  /// Auth payload sent with this namespace's CONNECT packet.
+  Map<String, dynamic>? auth;
 
   /// How long [emitWithAck] waits for the server's acknowledgement before
   /// failing with a [TimeoutException]. `null` means wait indefinitely.
@@ -85,12 +80,8 @@ class SocketIoLite {
   final Map<int, Completer<dynamic>> _pendingAcks = {};
   int _ackCounter = 0;
 
-  EngineIo? _engine;
-  StreamSubscription<String>? _engineSub;
-  Timer? _reconnectTimer;
-  int _reconnectAttempt = 0;
   bool _hasConnected = false;
-  bool _closedByUser = false;
+  bool _disposed = false;
   bool _connected = false;
 
   /// The server-assigned session id for this namespace, once connected.
@@ -100,7 +91,7 @@ class SocketIoLite {
   bool get connected => _connected;
 
   /// Opens a connection to [url] (e.g. `ws://localhost:3000` or
-  /// `wss://example.com`).
+  /// `wss://example.com`) and returns a socket for [namespace].
   ///
   /// The returned socket connects in the background; use [onConnect] to learn
   /// when it is ready. Optional [auth] is sent with the CONNECT packet, [query]
@@ -120,72 +111,36 @@ class SocketIoLite {
     SocketTransport Function()? transportFactory,
   }) {
     final uri = EngineIo.buildUri(url, query: query);
-    final socket = SocketIoLite._(uri, namespace)
-      .._auth = auth
-      .._headers = headers
-      .._transportFactory = transportFactory
-      ..ackTimeout = ackTimeout
-      ..reconnection = reconnection
-      ..reconnectionAttempts = reconnectionAttempts
-      ..reconnectionDelay = reconnectionDelay
-      ..reconnectionDelayMax = reconnectionDelayMax;
-    socket._openConnection();
+    final manager = SocketManager(
+      uri,
+      headers: headers,
+      transportFactory: transportFactory,
+      reconnection: reconnection,
+      reconnectionAttempts: reconnectionAttempts,
+      reconnectionDelay: reconnectionDelay,
+      reconnectionDelayMax: reconnectionDelayMax,
+    );
+    final socket = manager.socket(namespace, auth: auth, ackTimeout: ackTimeout);
+    manager.open();
     return socket;
   }
 
-  Future<void> _openConnection() async {
-    final engine = EngineIo(
-      _uri,
-      headers: _headers,
-      transportFactory: _transportFactory,
-    );
-    _engine = engine;
-    _engineSub = engine.messages.listen(
-      _onEngineMessage,
-      onError: (Object e, StackTrace _) => _fireError(e),
-      cancelOnError: false,
-    );
-    unawaited(engine.done.then((_) => _handleEngineDown(engine)));
+  /// Returns a socket for [namespace] on the **same** underlying connection,
+  /// creating it if needed. Reusing one connection across namespaces avoids a
+  /// second handshake and heartbeat.
+  SocketIoLite of(String namespace, {Map<String, dynamic>? auth}) =>
+      _manager.socket(namespace, auth: auth);
 
-    try {
-      await engine.open();
-    } catch (e) {
-      _fireError(e);
-      _handleEngineDown(engine);
-      return;
-    }
+  // ---- Incoming (called by the manager) -------------------------------------
 
-    // Request the namespace connection.
-    engine.send(
-      SocketParser.encode(
-        SocketPacket(
-          type: SocketPacketType.connect,
-          namespace: namespace,
-          data: _auth,
-        ),
-      ),
-    );
-  }
-
-  void _onEngineMessage(String payload) {
-    final SocketPacket packet;
-    try {
-      packet = SocketParser.decode(payload);
-    } catch (e) {
-      _fireError(e);
-      return;
-    }
-
-    // Ignore packets addressed to a different namespace.
-    if (packet.namespace != namespace) return;
-
+  void _deliver(SocketPacket packet) {
     switch (packet.type) {
       case SocketPacketType.connect:
         _handleConnect(packet);
       case SocketPacketType.connectError:
-        _fireError(_describeError(packet.data));
+        _dispatchError(_describeError(packet.data));
       case SocketPacketType.disconnect:
-        _handleEngineDown(_engine);
+        _handleServerDisconnect();
       case SocketPacketType.event:
         _handleEvent(packet);
       case SocketPacketType.ack:
@@ -196,17 +151,52 @@ class SocketIoLite {
     }
   }
 
+  void _sendConnect() {
+    _manager.send(
+      SocketParser.encode(
+        SocketPacket(
+          type: SocketPacketType.connect,
+          namespace: namespace,
+          data: auth,
+        ),
+      ),
+    );
+  }
+
+  void _onManagerDisconnected() {
+    _failPendingAcks(SocketException._('Connection closed while awaiting ack'));
+    final wasConnected = _connected;
+    _connected = false;
+    if (wasConnected) _announceDisconnect();
+  }
+
+  void _notifyReconnectAttempt(int attempt) {
+    for (final handler in List<ReconnectHandler>.from(_onReconnectAttempt)) {
+      handler(attempt);
+    }
+  }
+
+  void _notifyReconnectFailed() {
+    for (final handler in List<void Function()>.from(_onReconnectFailed)) {
+      handler();
+    }
+  }
+
+  void _dispatchError(Object error) {
+    for (final handler in List<ErrorHandler>.from(_onError)) {
+      handler(error);
+    }
+  }
+
   void _handleConnect(SocketPacket packet) {
     final data = packet.data;
     if (data is Map && data['sid'] != null) {
       id = data['sid'].toString();
     }
-    _reconnectTimer?.cancel();
-    _connected = true;
-
     final wasReconnecting = _hasConnected;
-    final attempt = _reconnectAttempt;
-    _reconnectAttempt = 0;
+    final attempt = _manager.reconnectAttempt;
+    _manager.markConnected();
+    _connected = true;
 
     _flush();
     for (final handler in List<LifecycleHandler>.from(_onConnect)) {
@@ -218,6 +208,14 @@ class SocketIoLite {
       }
     }
     _hasConnected = true;
+  }
+
+  void _handleServerDisconnect() {
+    _failPendingAcks(SocketException._('Server disconnected the namespace'));
+    final wasConnected = _connected;
+    _connected = false;
+    _manager.removeSocket(namespace);
+    if (wasConnected) _announceDisconnect();
   }
 
   void _handleAck(SocketPacket packet) {
@@ -266,6 +264,8 @@ class SocketIoLite {
       }
     }
   }
+
+  // ---- Public API -----------------------------------------------------------
 
   /// Registers [handler] for [event]. Multiple handlers per event are allowed.
   void on(String event, EventHandler handler) {
@@ -382,16 +382,16 @@ class SocketIoLite {
       _onReconnectAttempt.add(handler);
 
   /// Registers a callback fired when reconnection gives up after exhausting
-  /// [reconnectionAttempts].
+  /// `reconnectionAttempts`.
   void onReconnectFailed(void Function() handler) =>
       _onReconnectFailed.add(handler);
 
-  /// Sends a DISCONNECT packet, then tears down the connection (no reconnect).
+  /// Sends a DISCONNECT packet for this namespace, then tears it down. If this
+  /// was the last namespace on the connection, the connection is closed too.
   Future<void> disconnect() async {
-    final engine = _engine;
-    if (_connected && engine != null) {
+    if (_connected) {
       try {
-        engine.send(
+        _manager.send(
           SocketParser.encode(
             SocketPacket(
               type: SocketPacketType.disconnect,
@@ -406,29 +406,23 @@ class SocketIoLite {
     await dispose();
   }
 
-  /// Closes the connection, cancels any pending reconnect, and releases all
-  /// resources. Idempotent.
+  /// Detaches this namespace and releases its resources. Closes the underlying
+  /// connection when it was the last namespace. Idempotent.
   Future<void> dispose() async {
-    if (_closedByUser) return;
-    _closedByUser = true;
-    _reconnectTimer?.cancel();
-
-    final engine = _engine;
-    _engine = null;
-    await _engineSub?.cancel();
-    _engineSub = null;
-    await engine?.close();
-
+    if (_disposed) return;
+    _disposed = true;
+    final wasConnected = _connected;
+    _connected = false;
     _failPendingAcks(SocketException._('Socket disposed'));
-    if (_connected) {
-      _connected = false;
-      _announceDisconnect();
-    }
+    _manager.removeSocket(namespace);
+    if (wasConnected) _announceDisconnect();
   }
+
+  // ---- Internals ------------------------------------------------------------
 
   void _sendOrBuffer(String packet) {
     if (_connected) {
-      _engine?.send(packet);
+      _manager.send(packet);
     } else {
       _outbuffer.add(packet);
     }
@@ -437,7 +431,7 @@ class SocketIoLite {
   void _flush() {
     if (_outbuffer.isEmpty) return;
     for (final packet in _outbuffer) {
-      _engine?.send(packet);
+      _manager.send(packet);
     }
     _outbuffer.clear();
   }
@@ -447,50 +441,6 @@ class SocketIoLite {
     if (data is! List) return data;
     if (data.isEmpty) return null;
     return data.length == 1 ? data.first : data;
-  }
-
-  /// Handles the current [engine] going down: cleans up, announces a
-  /// disconnect, and schedules a reconnect. Ignores stale engines.
-  void _handleEngineDown(EngineIo? engine) {
-    if (engine == null || !identical(engine, _engine)) return;
-    _engine = null;
-    _engineSub?.cancel();
-    _engineSub = null;
-
-    _failPendingAcks(SocketException._('Connection closed while awaiting ack'));
-
-    final wasConnected = _connected;
-    _connected = false;
-    if (wasConnected) _announceDisconnect();
-
-    if (_closedByUser) return;
-    _scheduleReconnect();
-  }
-
-  void _scheduleReconnect() {
-    if (!reconnection || _closedByUser) return;
-
-    final max = reconnectionAttempts;
-    if (max != null && _reconnectAttempt >= max) {
-      for (final handler in List<void Function()>.from(_onReconnectFailed)) {
-        handler();
-      }
-      return;
-    }
-
-    _reconnectAttempt++;
-    final backoff =
-        reconnectionDelay.inMilliseconds * math.pow(2, _reconnectAttempt - 1);
-    final delayMs =
-        math.min(backoff, reconnectionDelayMax.inMilliseconds.toDouble())
-            .toInt();
-
-    for (final handler in List<ReconnectHandler>.from(_onReconnectAttempt)) {
-      handler(_reconnectAttempt);
-    }
-
-    _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(Duration(milliseconds: delayMs), _openConnection);
   }
 
   void _announceDisconnect() {
@@ -505,12 +455,6 @@ class SocketIoLite {
       if (!completer.isCompleted) completer.completeError(error);
     }
     _pendingAcks.clear();
-  }
-
-  void _fireError(Object error) {
-    for (final handler in List<ErrorHandler>.from(_onError)) {
-      handler(error);
-    }
   }
 
   Object _describeError(Object? data) {

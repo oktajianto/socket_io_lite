@@ -16,6 +16,9 @@ Work in progress — see `implementasi_plan.md`.
   `onReconnect` / `onReconnectAttempt` / `onReconnectFailed`.
 - Event helpers: `once`, `onAny` / `offAny`, and `onAck` / `offAck` (respond to
   server events that expect an acknowledgement).
+- Multiplexed namespaces: `socket.of('/ns')` shares a single WebSocket across
+  namespaces (Manager + Socket architecture), each with its own CONNECT,
+  listeners, and acks.
 - Web support via `dart:html` WebSocket, selected automatically through a
   conditional import — one API across native, web, and desktop. The web build
   compiles and shares the same protocol layer that is tested on the VM.

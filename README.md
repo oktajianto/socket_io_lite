@@ -115,6 +115,8 @@ socket.onReconnectFailed(() => print('gave up'));
 
 ### Namespaces & auth
 
+Connect straight to a namespace:
+
 ```dart
 final admin = SocketIoLite.connect(
   'ws://localhost:3000',
@@ -123,6 +125,21 @@ final admin = SocketIoLite.connect(
   query: {'v': '1'},           // appended to the handshake URL
 );
 ```
+
+Or share **one** WebSocket across several namespaces with `of()`:
+
+```dart
+final chat  = SocketIoLite.connect('ws://localhost:3000'); // root '/'
+final admin = chat.of('/admin');   // same connection, second namespace
+final notes = chat.of('/notes', auth: {'token': 'secret'});
+
+admin.on('kick', (data) => ...);
+notes.emit('mark-read', 42);
+```
+
+`of()` returns the same instance for a given namespace, so calling it again is
+cheap. The underlying connection closes automatically once the last namespace is
+disposed.
 
 ### Connecting to localhost during development
 

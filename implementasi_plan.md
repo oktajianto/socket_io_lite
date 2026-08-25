@@ -207,9 +207,12 @@ Diurutkan dari nilai tertinggi.
 - [x] `onAny(handler)` / `offAny()` untuk menangkap semua event
 - [x] `once(event, handler)` — listener sekali pakai
 - [x] `onAck(event, handler)` — balas ack saat server mengirim event ber-ack
-- [~] Namespace ganda `socket.of('/admin')` (share 1 koneksi) — **ditunda**;
-      namespace terpisah (koneksi sendiri) sudah jalan via param `namespace`.
-      `of()` butuh refactor Manager/Socket, ditunda karena hanya optimasi
+- [x] **Namespace ganda `socket.of('/admin')` (share 1 koneksi)** — refactor ke
+      pola **Manager + Socket** (pakai `part`): satu `SocketManager` memegang
+      EngineIo + reconnection, banyak `SocketIoLite` per-namespace berbagi 1
+      WebSocket. Manager mendemux paket per-namespace; tiap namespace kirim
+      CONNECT sendiri (`40/ns,`); `of()` mengembalikan instance yang sama untuk
+      namespace yang sama; koneksi ditutup saat namespace terakhir dilepas.
 
 **Prioritas menengah**
 - [ ] Dukungan **binary** (BINARY_EVENT `45` / BINARY_ACK `46` + attachment placeholder)

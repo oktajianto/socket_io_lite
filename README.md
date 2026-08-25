@@ -19,10 +19,11 @@ on `localhost` during development.
 Linux. It is a pure-Dart package (no third-party dependencies), built entirely
 on the Dart SDK's own `WebSocket`, so it runs anywhere Flutter runs.
 
-> **Protocol support:** targets **Engine.IO v4**, so it works with a
-> **Socket.IO server v3 or v4** — plain Node.js `socket.io`, an Express app, or
-> a NestJS gateway (all built on the same `socket.io` library). The client
-> connects over WebSocket transport with `?EIO=4`.
+> **Protocol support:** targets **Engine.IO v4**, so it works with any
+> **Socket.IO v3 or v4** server — the reference `socket.io` for Node.js, or any
+> protocol-compatible implementation in other languages and frameworks (Go,
+> Python, Java, and more). The client connects over WebSocket transport with
+> `?EIO=4`.
 
 ## Why another Socket.IO client?
 
@@ -215,13 +216,14 @@ you and exposes a simple `on`/`emit` API.
 
 ## Compatibility
 
-| Server                                   | Supported |
-| ---------------------------------------- | --------- |
-| `socket.io` v4 (Node.js)                 | ✅        |
-| `socket.io` v3 (Node.js)                 | ✅        |
-| NestJS `@nestjs/websockets` (socket.io)  | ✅        |
-| `socket.io` v2 / Engine.IO v3            | ❌ (use EIO v4 server) |
-| Raw WebSocket servers (non–Socket.IO)    | ❌ (different protocol) |
+Any Socket.IO server that speaks Engine.IO v4, in any language or framework.
+
+| Server                                        | Supported |
+| --------------------------------------------- | --------- |
+| Socket.IO **v4** (any language/framework)     | ✅        |
+| Socket.IO **v3** (any language/framework)     | ✅        |
+| Socket.IO v2 / Engine.IO v3                   | ❌ (use an EIO v4 server) |
+| Raw WebSocket servers (non–Socket.IO)         | ❌ (different protocol) |
 
 ### Platforms
 

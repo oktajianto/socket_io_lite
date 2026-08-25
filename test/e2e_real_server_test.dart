@@ -36,4 +36,24 @@ void main() {
       'from': 'server',
     });
   });
+
+  test('emitWithAck resolves with the real server acknowledgement', () async {
+    final socket = SocketIoLite.connect('ws://localhost:3000');
+    addTearDown(socket.dispose);
+
+    final connected = Completer<void>();
+    socket.onConnect((_) => connected.complete());
+    socket.onError((e) => fail('unexpected error: $e'));
+
+    await connected.future.timeout(const Duration(seconds: 5));
+
+    final ack = await socket
+        .emitWithAck('chat:message', {'text': 'halo'})
+        .timeout(const Duration(seconds: 5));
+
+    expect(ack, {
+      'ok': true,
+      'received': {'text': 'halo'},
+    });
+  });
 }

@@ -129,6 +129,64 @@ void main() {
     expect(fake.sent, contains('42["early",1]'));
   });
 
+  test('emitWithAck resolves with the server ack payload', () async {
+    final fake = FakeTransport();
+    final socket =
+        SocketIoLite.connect('ws://x', transportFactory: () => fake);
+    addTearDown(socket.dispose);
+
+    fake.serverSend(_openFrame);
+    await pump();
+    fake.serverSend('40{"sid":"abc"}');
+    await pump();
+
+    final future = socket.emitWithAck('chat:message', {'text': 'hi'});
+
+    // First ack id is 0 → engine message frame '4' + socket event '20[...]'.
+    expect(fake.sent, contains('420["chat:message",{"text":"hi"}]'));
+
+    // Server replies with an ACK for id 0.
+    fake.serverSend('430[{"ok":true}]');
+    final result = await future.timeout(const Duration(seconds: 1));
+    expect(result, {'ok': true});
+  });
+
+  test('emitWithAck times out when no ack arrives', () async {
+    final fake = FakeTransport();
+    final socket = SocketIoLite.connect(
+      'ws://x',
+      ackTimeout: const Duration(milliseconds: 50),
+      transportFactory: () => fake,
+    );
+    addTearDown(socket.dispose);
+
+    fake.serverSend(_openFrame);
+    await pump();
+    fake.serverSend('40{"sid":"abc"}');
+    await pump();
+
+    await expectLater(
+      socket.emitWithAck('slow'),
+      throwsA(isA<TimeoutException>()),
+    );
+  });
+
+  test('pending acks fail when the connection closes', () async {
+    final fake = FakeTransport();
+    final socket =
+        SocketIoLite.connect('ws://x', transportFactory: () => fake);
+
+    fake.serverSend(_openFrame);
+    await pump();
+    fake.serverSend('40{"sid":"abc"}');
+    await pump();
+
+    final future = socket.emitWithAck('never');
+    await fake.close();
+
+    await expectLater(future, throwsA(isA<SocketException>()));
+  });
+
   test('onDisconnect fires when the connection closes', () async {
     final fake = FakeTransport();
     final socket =

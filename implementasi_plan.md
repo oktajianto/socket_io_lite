@@ -153,12 +153,13 @@ Terverifikasi end-to-end ke server `socket.io` v4 asli.
 - [x] `test/e2e_real_server_test.dart` — uji ke server asli (tag `e2e`, skip default)
 - [x] **Milestone: MVP jalan di native, teruji lawan server resmi**
 
-### Fase 5 — Acknowledgements
+### Fase 5 — Acknowledgements (SELESAI)
 
-- [ ] `emitWithAck(event, data) -> Future` — generate ackId, kirim `42<id>[...]`
-- [ ] Terima ACK `43<id>[...]` → complete Future yang cocok
-- [ ] Timeout ack opsional (`ackTimeout`)
-- [ ] Test round-trip ack
+- [x] `emitWithAck(event, [data]) -> Future` — generate ackId, kirim `42<id>[...]`
+- [x] Terima ACK `43<id>[...]` → complete Future yang cocok (unwrap arg tunggal)
+- [x] `ackTimeout` opsional (di `connect`) → `TimeoutException`
+- [x] Pending ack gagal dengan `SocketException` saat koneksi tutup
+- [x] Test round-trip ack (transport palsu) + verifikasi ke server asli
 
 ### Fase 6 — Reconnection & connection state
 

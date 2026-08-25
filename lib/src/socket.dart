@@ -42,6 +42,12 @@ class SocketIoLite {
   final List<LifecycleHandler> _onDisconnect = [];
   final List<ErrorHandler> _onError = [];
   final List<String> _outbuffer = [];
+  final Map<int, Completer<dynamic>> _pendingAcks = {};
+  int _ackCounter = 0;
+
+  /// How long [emitWithAck] waits for the server's acknowledgement before
+  /// failing with a [TimeoutException]. `null` means wait indefinitely.
+  Duration? ackTimeout;
 
   bool _connected = false;
   bool _disposed = false;
@@ -66,6 +72,7 @@ class SocketIoLite {
     Map<String, dynamic>? auth,
     Map<String, String> query = const {},
     Map<String, dynamic>? headers,
+    Duration? ackTimeout,
     SocketTransport Function()? transportFactory,
   }) {
     final uri = EngineIo.buildUri(url, query: query);
@@ -74,7 +81,7 @@ class SocketIoLite {
       headers: headers,
       transportFactory: transportFactory,
     );
-    final socket = SocketIoLite._(engine, namespace);
+    final socket = SocketIoLite._(engine, namespace)..ackTimeout = ackTimeout;
     socket._start(auth);
     return socket;
   }
@@ -128,8 +135,7 @@ class SocketIoLite {
       case SocketPacketType.event:
         _handleEvent(packet);
       case SocketPacketType.ack:
-        // Acknowledgements are handled in a later phase.
-        break;
+        _handleAck(packet);
       case SocketPacketType.binaryEvent:
       case SocketPacketType.binaryAck:
         break;
@@ -148,14 +154,19 @@ class SocketIoLite {
     }
   }
 
+  void _handleAck(SocketPacket packet) {
+    final id = packet.ackId;
+    if (id == null) return;
+    final completer = _pendingAcks.remove(id);
+    if (completer == null || completer.isCompleted) return;
+    completer.complete(_payloadOf(packet.data));
+  }
+
   void _handleEvent(SocketPacket packet) {
     final data = packet.data;
     if (data is! List || data.isEmpty) return;
     final event = data.first.toString();
-    final args = data.sublist(1);
-    final payload = args.isEmpty
-        ? null
-        : (args.length == 1 ? args.first : args);
+    final payload = _payloadOf(data.sublist(1));
 
     final handlers = _listeners[event];
     if (handlers == null) return;
@@ -191,6 +202,43 @@ class SocketIoLite {
         ),
       ),
     );
+  }
+
+  /// Emits [event] with an optional [data] payload and waits for the server's
+  /// acknowledgement, completing with the acked value.
+  ///
+  /// Fails with a [TimeoutException] if [ackTimeout] is set and elapses, or
+  /// with a [SocketException] if the socket closes while waiting.
+  Future<dynamic> emitWithAck(String event, [Object? data]) {
+    final id = _ackCounter++;
+    final completer = Completer<dynamic>();
+    _pendingAcks[id] = completer;
+
+    final args = data == null ? [event] : [event, data];
+    _sendOrBuffer(
+      SocketParser.encode(
+        SocketPacket(
+          type: SocketPacketType.event,
+          namespace: namespace,
+          data: args,
+          ackId: id,
+        ),
+      ),
+    );
+
+    final timeout = ackTimeout;
+    if (timeout != null) {
+      Timer(timeout, () {
+        final pending = _pendingAcks.remove(id);
+        if (pending != null && !pending.isCompleted) {
+          pending.completeError(
+            TimeoutException('No ack for "$event"', timeout),
+          );
+        }
+      });
+    }
+
+    return completer.future;
   }
 
   /// Registers a callback fired when the connection is established.
@@ -244,7 +292,15 @@ class SocketIoLite {
     _outbuffer.clear();
   }
 
+  /// Normalizes an argument list into a single value, a list, or `null`.
+  static dynamic _payloadOf(Object? data) {
+    if (data is! List) return data;
+    if (data.isEmpty) return null;
+    return data.length == 1 ? data.first : data;
+  }
+
   void _handleClosed() {
+    _failPendingAcks(SocketException._('Connection closed while awaiting ack'));
     final wasConnected = _connected;
     _connected = false;
     if (_disconnectAnnounced) return;
@@ -256,6 +312,14 @@ class SocketIoLite {
         handler(null);
       }
     }
+  }
+
+  void _failPendingAcks(Object error) {
+    if (_pendingAcks.isEmpty) return;
+    for (final completer in _pendingAcks.values) {
+      if (!completer.isCompleted) completer.completeError(error);
+    }
+    _pendingAcks.clear();
   }
 
   void _fireError(Object error) {

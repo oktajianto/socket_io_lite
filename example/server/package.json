@@ -1,0 +1,13 @@
+{
+  "name": "socket_io_lite_example_server",
+  "private": true,
+  "version": "1.0.0",
+  "type": "commonjs",
+  "description": "Minimal Socket.IO server for testing socket_io_lite.",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "socket.io": "^4.7.5"
+  }
+}

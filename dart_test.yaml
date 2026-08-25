@@ -1,0 +1,6 @@
+tags:
+  e2e:
+    # These tests need a running socket.io server (see example/server).
+    # They are skipped in the normal suite; run them explicitly with:
+    #   flutter test --tags e2e --run-skipped
+    skip: "requires a running socket.io server; run with --tags e2e --run-skipped"

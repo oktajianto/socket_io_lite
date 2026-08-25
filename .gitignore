@@ -38,3 +38,7 @@ example/linux/
 example/macos/
 example/windows/
 example/web/
+
+# Node.js test server deps
+example/server/node_modules/
+example/server/package-lock.json

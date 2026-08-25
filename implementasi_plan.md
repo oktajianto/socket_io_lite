@@ -134,21 +134,24 @@ Fondasi paling penting & paling mudah dites. **Tanpa jaringan sama sekali.**
 - [x] `test/engine_test.dart` — handshake, echo message, ping→pong, heartbeat
       timeout, close-sebelum-handshake (pakai server Engine.IO loopback)
 
-### Fase 4 — Lapisan Socket.IO + facade (MVP bisa dipakai)
+### Fase 4 — Lapisan Socket.IO + facade (SELESAI — MVP bisa dipakai)
 
-Target: **client bisa nyambung ke NestJS/Node asli, kirim & terima event.**
+Target: **client bisa nyambung ke NestJS/Node asli, kirim & terima event.** ✅
+Terverifikasi end-to-end ke server `socket.io` v4 asli.
 
-- [ ] `socket.dart` — `SocketIoLite`:
-  - [ ] `SocketIoLite.connect(url, {options})`
-  - [ ] Kirim CONNECT `40` (namespace default), tunggu balasan
-  - [ ] `on(event, handler)` / `off(event)` — dispatch dari frame `42`
-  - [ ] `emit(event, data)` → `42[...]`
-  - [ ] `onConnect` / `onDisconnect` / `onError`
-- [ ] `socket_io_lite.dart` — barrel export
-- [ ] `example/server/` — server Node/NestJS minimal (echo)
-- [ ] `example/lib/main.dart` — demo connect + on + emit
-- [ ] `test/socket_test.dart` — dispatch event pakai transport palsu
-- [ ] **Milestone: rilis internal v0.1.0-dev — MVP jalan di native**
+- [x] `socket.dart` — `SocketIoLite`:
+  - [x] `SocketIoLite.connect(url, {namespace, auth, query, headers, transportFactory})`
+  - [x] Kirim CONNECT `40` (atau `40/ns,`), tunggu balasan, simpan `id` (sid)
+  - [x] `on(event, handler)` / `off(event)` — dispatch dari frame `42`, filter namespace
+  - [x] `emit(event, data)` → `42[...]`; **buffer emit sebelum connect, flush saat connect**
+  - [x] `onConnect` / `onDisconnect` / `onError`; `connect_error` → `SocketException`
+  - [x] `disconnect()` (kirim `41`) & `dispose()` idempotent
+- [x] `socket_io_lite.dart` — barrel export API publik (parser/engine tetap internal)
+- [x] `example/server/` — server Node `socket.io` minimal (echo + ack)
+- [x] `example/lib/main.dart` — demo connect + on + emit (analyze bersih)
+- [x] `test/socket_test.dart` — 7 test dispatch pakai transport palsu
+- [x] `test/e2e_real_server_test.dart` — uji ke server asli (tag `e2e`, skip default)
+- [x] **Milestone: MVP jalan di native, teruji lawan server resmi**
 
 ### Fase 5 — Acknowledgements
 

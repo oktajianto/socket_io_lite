@@ -19,11 +19,10 @@ on `localhost` during development.
 Linux. It is a pure-Dart package (no third-party dependencies), built entirely
 on the Dart SDK's own `WebSocket`, so it runs anywhere Flutter runs.
 
-> **Protocol support:** targets **Engine.IO v4**, so it works with any
+> **Protocol support:** targets **Engine.IO v4**, so it works with a
 > **Socket.IO server v3 or v4** — plain Node.js `socket.io`, an Express app, or
-> a NestJS gateway (all built on the same `socket.io` library). Only the old
-> Socket.IO v2 (Engine.IO v3) is unsupported. The client connects over
-> WebSocket transport with `?EIO=4`.
+> a NestJS gateway (all built on the same `socket.io` library). The client
+> connects over WebSocket transport with `?EIO=4`.
 
 ## Why another Socket.IO client?
 
